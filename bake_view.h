@@ -20,81 +20,21 @@
 // POSSIBILITY OF SUCH DAMAGES
 //
 
+
 #pragma once
 
-#include <cstddef>
-
+#include "bake_api.h"
 
 namespace bake
 {
 
-
-struct SampleInfo
-{
-  unsigned  tri_idx;
-  float     bary[3];
-  float     dA;
-};
-
-
-struct Mesh
-{
-  size_t    num_vertices;
-  float*    vertices;
-  size_t    num_normals;
-  float*    normals;
-  size_t    num_triangles;
-  unsigned int* tri_vertex_indices;
-  unsigned int* tri_normal_indices;
-  float     bbox_min[3];
-  float     bbox_max[3];
-};
-
-
-struct AOSamples
-{
-  size_t        num_samples;
-  float*        sample_positions;
-  float*        sample_normals;
-  float*        sample_face_normals;
-  SampleInfo*   sample_infos;
-};
-
-enum VertexFilterMode
-{
-  VERTEX_FILTER_AREA_BASED=0,
-  VERTEX_FILTER_LEAST_SQUARES,
-  VERTEX_FILTER_INVALID
-};
-
-
-void sampleSurface(
-    const Mesh& mesh,
-    size_t min_samples_per_triangle,
-    AOSamples&  ao_samples
-    );
-
-
-void computeAO( 
+void view(
+    int               argc,
+    char**            argv,
     const Mesh&       mesh,
     const AOSamples&  ao_samples,
-    int               rays_per_sample,
-    float*            ao_values 
+    const float*      ao_values,
+    const float*      vertex_ao_values
     );
-
-
-void mapAOToVertices(
-    const Mesh&             mesh,
-    const AOSamples&        ao_samples,
-    const float*            ao_values,
-    const VertexFilterMode  mode,
-    const float             regularization_weight,
-    float*                  vertex_ao
-    );
-
-
-void mapAOToTextures(
-    );
-
 
 }
