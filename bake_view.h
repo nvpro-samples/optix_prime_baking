@@ -28,13 +28,8 @@
 namespace bake
 {
 
-void view(
-    int               argc,
-    char**            argv,
-    const Mesh&       mesh,
-    const AOSamples&  ao_samples,
-    const float*      ao_values,
-    const float*      vertex_ao_values
-    );
+  void view(
+    const bake::Mesh& bake_mesh,
+    const float* vertex_colors );
 
 }

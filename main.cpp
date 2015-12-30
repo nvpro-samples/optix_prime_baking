@@ -212,7 +212,6 @@ int sample_main( int argc, const char** argv )
 
   std::cerr << "Generate sample points ... "; std::cerr.flush();
 
-#if 0
   timer.reset();
   timer.start();
   bake::AOSamples ao_samples = { 0 };
@@ -243,15 +242,12 @@ int sample_main( int argc, const char** argv )
   float* vertex_ao = new float[ bake_mesh.num_vertices ];
   bake::mapAOToVertices( bake_mesh, ao_samples, ao_values, config.filter_mode, config.regularization_weight, vertex_ao );
   printTimeElapsed( timer ); 
-#endif
 
-#if 0
   //
   // Visualize results
   //
   std::cerr << "Launch viewer  ... \n" << std::endl;
-  bake::view( mesh.positions, mesh.indices, vertex_ao );
-#endif
+  bake::view( bake_mesh, vertex_ao );
   
   return 1;
 }
