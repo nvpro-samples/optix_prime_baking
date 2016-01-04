@@ -48,7 +48,11 @@ struct Config {
 
   Config( int argc, const char ** argv ) {
     // set defaults
-    obj_filename = std::string( "./cow.obj" );  // TODO: resource path?
+#ifdef PROJECT_ABSDIRECTORY
+    obj_filename = std::string(PROJECT_ABSDIRECTORY) + std::string("/assets/cow.obj");
+#else
+    obj_filename = std::string( "./assets/cow.obj" );
+#endif
     num_samples = 0;  // default means determine from mesh
     min_samples_per_face = SAMPLES_PER_FACE;
     num_rays    = NUM_RAYS; 
