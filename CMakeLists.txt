@@ -45,6 +45,25 @@ endif(SUPPORT_NVTOOLSEXT)
 _add_package_Cuda () 
 _add_package_Optix ()
 
+# Find Eigen template lib for least squares fitting.
+# If any other samples need this library in the future, then move this block
+# to higher level CMakeLists.txt.
+
+set( EIGEN3_PATH "/usr/include/eigen3" CACHE PATH "Path to optional Eigen3 dir, for baking sample" )
+
+if ( EXISTS "${EIGEN3_PATH}/signature_of_eigen3_matrix_library" )
+  set(EIGEN3_ENABLED TRUE)
+else()
+  set( EIGEN3_ENABLED FALSE )
+endif()
+
+if (EIGEN3_ENABLED)
+  include_directories( ${EIGEN3_PATH} )
+  add_definitions(-DEIGEN3_ENABLED=1)
+endif()
+
+# end Eigen
+
 
 #####################################################################################
 # Source files for this project
