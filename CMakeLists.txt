@@ -41,9 +41,15 @@ endif(SUPPORT_NVTOOLSEXT)
 # add files in PACKAGE_SOURCE_FILES
 #
 
-# TODO: pass REQUIRED argument
 _add_package_Cuda () 
+if( NOT CUDA_FOUND )
+  message(SEND_ERROR "Baking sample requires CUDA")
+endif()
+
 _add_package_Optix ()
+if ( NOT OPTIX_FOUND )
+  message(SEND_ERROR "Baking sample requires OptiX")
+endif()
 
 # Find Eigen template lib for least squares fitting.
 # If any other samples need this library in the future, then move this block
