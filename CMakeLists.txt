@@ -83,6 +83,12 @@ source_group(CUDA FILES
 #####################################################################################
 # Linkage
 #
+
+# Need winmm for timing code on Windows
+if (WIN32) 
+  LIST(APPEND PLATFORM_LIBRARIES winmm.lib)
+endif()
+
 target_link_libraries(${PROJNAME} optimized
     ${LIBRARIES_OPTIMIZED}
     ${PLATFORM_LIBRARIES}
