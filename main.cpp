@@ -24,6 +24,8 @@
 #include "bake_view.h"
 #include "bake_util.h"
 
+#include <main.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
@@ -149,6 +151,9 @@ struct Config {
 int sample_main( int argc, const char** argv )
 {
   
+  // show console and redirect printing
+  NVPWindow::sysVisibleConsole();
+
   const Config config( argc, argv ); 
   
   Timer timer;
