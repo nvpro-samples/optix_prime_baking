@@ -1,6 +1,6 @@
 Downloaded from the [Morgan McGuire Graphics Data site] (http://graphics.cs.williams.edu/data/meshes.xml)
 
-Triangles are large enough to show benefits from least squares fitting (--least_squares 1).
+Triangles are large enough to show benefits from least squares fitting (when built with the Eigen library).
 
 
 Original copyright text:
