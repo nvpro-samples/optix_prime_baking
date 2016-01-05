@@ -42,7 +42,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>  // for cross product
-#include <Eigen/Sparse>
+#include <Eigen/SparseCholesky>
 
 using namespace optix;
 
