@@ -49,9 +49,9 @@ struct Config {
   Config( int argc, const char ** argv ) {
     // set defaults
 #ifdef PROJECT_ABSDIRECTORY
-    obj_filename = std::string(PROJECT_ABSDIRECTORY) + std::string("/assets/cow.obj");
+    obj_filename = std::string(PROJECT_ABSDIRECTORY) + std::string("/assets/teapot.obj");
 #else
-    obj_filename = std::string( "./assets/cow.obj" );
+    obj_filename = std::string( "./assets/teapot.obj" );
 #endif
     num_samples = 0;  // default means determine from mesh
     min_samples_per_face = SAMPLES_PER_FACE;
