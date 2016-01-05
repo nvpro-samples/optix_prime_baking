@@ -1,9 +1,9 @@
-Downloaded from Morgan McGuire Graphics Data (http://graphics.cs.williams.edu/data/meshes.xml).
+Downloaded from the [Morgan McGuire Graphics Data site] (http://graphics.cs.williams.edu/data/meshes.xml)
 
 Triangles are large enough to show benefits from least squares fitting (--least_squares 1).
 
 
-Original copyright.txt:
+Original copyright text:
 
 Martin Newell modeled this teapot using bicubic Bezier patches in 1975
 as part of an entire tea set. It first appeared in his
