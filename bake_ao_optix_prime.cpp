@@ -68,12 +68,12 @@ void bake::ao_optix_prime(
     )
 {
 
+  Timer setup_timer;
+  setup_timer.start( );
+
   Context ctx = Context::create( RTP_CONTEXT_TYPE_CUDA );
   Model   model = createModel( ctx, mesh );
   Query   query = model->createQuery( RTP_QUERY_TYPE_ANY );
-
-  Timer setup_timer;
-  setup_timer.start();
 
   // Copy all necessary data to device
   Buffer<float3> sample_normals     ( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
