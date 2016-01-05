@@ -55,7 +55,7 @@ endif()
 # If any other samples need this library in the future, then move this block
 # to higher level CMakeLists.txt.
 
-set( EIGEN3_PATH "/usr/include/eigen3" CACHE PATH "Path to optional Eigen3 dir, for baking sample" )
+set( EIGEN3_PATH "/usr/include/eigen3" CACHE PATH "Path to optional Eigen3 dir, for least squares filtering in baking sample" )
 
 if ( EXISTS "${EIGEN3_PATH}/signature_of_eigen3_matrix_library" )
   set(EIGEN3_ENABLED TRUE)
