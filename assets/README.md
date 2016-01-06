@@ -1,17 +1,7 @@
-Downloaded from the [Morgan McGuire Graphics Data site] (http://graphics.cs.williams.edu/data/meshes.xml)
+Lucy model
+Source: Stanford University Computer Graphics Laboratory
+
+Decimated to 80k triangles.
 
 Triangles are large enough to show benefits from least squares filtering (when built with the Eigen library).
 
-
-Original copyright text:
-
-Martin Newell modeled this teapot using bicubic Bezier patches in 1975
-as part of an entire tea set. It first appeared in his
-Ph.D. dissertation. Jim Blinn scaled the teapot horizontally by 1.3x
-to cancel the effect of the rectangular pixels on their display. The
-original had no bottom; most variations add one. Kenzie Lamar at
-Vicarious Visions created this version from the default teapot model
-in 3D Studio Max. He resized the top so that it fits snugly, created a
-shell and welded the spout and handle so that the teapot is a manifold
-without boundary, and created a unique and consistent resolution texture
-parameterization for the entire model.
