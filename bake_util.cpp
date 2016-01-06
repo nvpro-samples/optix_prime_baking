@@ -70,7 +70,7 @@ bool sutilCurrentTime( double* current_time )
 {
   struct timeval tv;
   if (gettimeofday( &tv, 0 )) {
-    fprintf( stderr, "sutilCurrentTime(): gettimeofday failed!\n" );
+    std::cerr << "sutilCurrentTime(): gettimeofday failed!\n";
     return false;
   }
 
