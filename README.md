@@ -47,3 +47,10 @@ Quick build instructions for Visual Studio:
 There are command line arguments for the input mesh, number of sample points, number of rays, etc.  Use the "-h" flag or
 check main.cpp.
  
+#### Examples
+
+An example with a decimated Lucy model (80k faces) is shown below.  The right image uses least squares filtering and is noticeably smoother when the triangles are this large.
+![Lucy Image](https://github.com/nvpro-samples/optix_prime_baking/blob/master/doc/lucy_least_squares_comparison.png)
+
+Mesh detail showing triangle size: 
+![Lucy mesh detail](https://github.com/nvpro-samples/optix_prime_baking/blob/master/doc/lucy_meshlab.png)
