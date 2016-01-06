@@ -18,7 +18,9 @@ vertices of a mesh for use during final shading with OpenGL.  The steps are as f
 
 The benefit of least squares filtering is shown below on the default teapot.obj mesh.
 
-TODO
+![teapot without least squares filtering](https://github.com/nvpro-samples/optix_prime_baking/blob/master/assets/teapot-no-least-squares.png "Teapot Without Least Squares")
+
+![teapot with least squares filtering](https://github.com/nvpro-samples/optix_prime_baking/blob/master/assets/teapot-least-squares.png "Teapot With Least Squares")
 
 There are command line arguments for the input mesh, number of sample points, number of rays, etc.  Use the "-h" flag or
 check main.cpp.
