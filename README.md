@@ -15,12 +15,34 @@ vertices of a mesh for use during final shading with OpenGL.  The steps are as f
 
   * **Visualize occlusion in OpenGL as a vertex attribute**.
 
+#### Requirements
+  * A recent version of Visual Studio (tested with VS 2013)
+  * CUDA 7.5+ and matching driver with supported GPU.
+  * OptiX 3.9.0 from the shared_optix git repo (see below).  No separate install of OptiX is needed.
 
-The benefit of least squares filtering is shown below on the default teapot.obj mesh.
+#### How to Build & Run
 
-![teapot without least squares filtering](https://github.com/nvpro-samples/optix_prime_baking/blob/master/assets/teapot-no-least-squares.png "Teapot Without Least Squares")
+Quick build instructions for Visual Studio:
 
-![teapot with least squares filtering](https://github.com/nvpro-samples/optix_prime_baking/blob/master/assets/teapot-least-squares.png "Teapot With Least Squares")
+1) Clone the following nvpro-samples repositories:
+  - //github.com/nvpro-samples/build_all.git
+  - //github.com/nvpro-samples/shared_optix.git
+  - //github.com/nvpro-samples/shared_sources.git
+  - //github.com/nvpro-samples/optix_prime_baking.git
+
+2) Download and install a recent version of [CMake](https://cmake.org)
+
+3) Open CMake-gui, and generate Visual Studio projects:
+  - Source code to: /nvpro_ samples/build_all
+  - Build folder: /nvpro_samples/build
+  - Click Configure and select a version of Visual Studio.
+  - Click Generate
+
+4) Open the nvpro_samples.sln into Visual Studio, and Build All
+
+5) Select the optix_prime_baking sample as the Startup project
+
+6) Click Run!
 
 There are command line arguments for the input mesh, number of sample points, number of rays, etc.  Use the "-h" flag or
 check main.cpp.
