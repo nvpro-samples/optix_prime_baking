@@ -27,6 +27,7 @@
 #include "Buffer.h"
 #include <optix_prime/optix_primepp.h>
 #include <optixu/optixu_math_namespace.h>
+#include <optixu/optixu_matrix_namespace.h>
 
 #include "random.h"
 
@@ -56,6 +57,38 @@ Model createModel( Context& context, const bake::Mesh& mesh )
   return model;
 }
 
+Model createInstances( Context& context, const bake::Mesh& mesh, std::vector<Model>& models )
+{
+  const int numInstances = 1;
+
+  // debug: same model for all instances
+  Model model = context->createModel();
+  model->setTriangles(
+      mesh.num_triangles, RTP_BUFFER_TYPE_HOST, mesh.tri_vertex_indices,
+      mesh.num_vertices,  RTP_BUFFER_TYPE_HOST, mesh.vertices
+      );
+  model->update( 0 );
+
+  // TODO: optimize for single model with identity xform
+  //if (1) return model;
+
+  std::vector<RTPmodel> instances(numInstances);
+  std::vector<optix::Matrix4x4> transforms(numInstances);
+  Model scene = context->createModel();
+
+  // debug: same model, identity xform
+  for (int i = 0; i < numInstances; ++i) {
+    instances[i] = model->getRTPmodel();
+    transforms[i] = optix::Matrix4x4::identity();
+    models.push_back(model);  // Model is ref counted, so need to return it to prevent destruction
+  }
+
+  scene->setInstances(numInstances, RTP_BUFFER_TYPE_HOST, &instances[0],
+                      RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );
+  scene->update( 0 );
+  return scene;
+}
+
 
 } // end namespace
 
@@ -72,8 +105,9 @@ void bake::ao_optix_prime(
   setup_timer.start( );
 
   Context ctx = Context::create( RTP_CONTEXT_TYPE_CUDA );
-  Model   model = createModel( ctx, mesh );
-  Query   query = model->createQuery( RTP_QUERY_TYPE_ANY );
+  std::vector<Model> models;
+  Model   scene = createInstances( ctx, mesh, models );
+  Query   query = scene->createQuery( RTP_QUERY_TYPE_ANY );
 
   // Copy all necessary data to device
   Buffer<float3> sample_normals     ( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
