@@ -24,6 +24,7 @@
 #include "bake_api.h"
 #include "bake_sample.h"
 #include <optixu/optixu_math_namespace.h>
+#include <optixu/optixu_matrix_namespace.h>
 #include "random.h"
 
 #include <algorithm>
@@ -60,8 +61,14 @@ float3 faceforward( const float3& normal, const float3& geom_normal )
   return -normal;
 }
 
+float3 operator*(const optix::Matrix4x4& mat, const float3& v)
+{
+  return make_float3(mat*make_float4(v, 1.0f)); 
+}
 
-void sample_triangle(const int3* tri_vertex_indices, const float3* verts,
+
+void sample_triangle(const optix::Matrix4x4& xform, const optix::Matrix4x4& xform_invtrans,
+                     const int3* tri_vertex_indices, const float3* verts,
                      const int3* tri_normal_indices, const float3* normals,
                      size_t tri_idx, size_t tri_sample_begin, size_t tri_sample_end,
                      float3* sample_positions, float3* sample_norms, float3* sample_face_norms, bake::SampleInfo* sample_infos,
@@ -110,9 +117,9 @@ void sample_triangle(const int3* tri_vertex_indices, const float3* verts,
     bary.y = r2*sqrt_r1;
     bary.z = 1.0f - bary.x - bary.y;
 
-    sample_positions[sample_idx] = bary.x*v0 + bary.y*v1 + bary.z*v2;
-    sample_norms[sample_idx] = optix::normalize( bary.x*n0 + bary.y*n1 + bary.z*n2 );
-    sample_face_norms[sample_idx] = face_normal;
+    sample_positions[sample_idx] = xform*(bary.x*v0 + bary.y*v1 + bary.z*v2);
+    sample_norms[sample_idx] = optix::normalize(xform_invtrans*( bary.x*n0 + bary.y*n1 + bary.z*n2 ));
+    sample_face_norms[sample_idx] = optix::normalize(xform_invtrans*face_normal);
 
   }
 }
@@ -128,12 +135,16 @@ double triangle_area(const float3& v0, const float3& v1, const float3& v2)
 }
 
 
-void bake::sample_surface_random(
-    const Mesh& mesh,
+
+void sample_instance(
+    const bake::Instance& instance,
     const size_t min_samples_per_triangle,
-    AOSamples&  ao_samples
+    bake::AOSamples&  ao_samples
     )
 {
+  const bake::Mesh& mesh = *instance.mesh;
+  const optix::Matrix4x4 xform(instance.xform);
+  const optix::Matrix4x4 xform_invtrans = xform.inverse().transpose();
   assert( ao_samples.num_samples >= mesh.num_triangles*min_samples_per_triangle );
   assert( mesh.vertices               );
   assert( mesh.num_vertices           );
@@ -149,7 +160,7 @@ void bake::sample_surface_random(
   float3* sample_positions  = reinterpret_cast<float3*>( ao_samples.sample_positions );   
   float3* sample_norms      = reinterpret_cast<float3*>( ao_samples.sample_normals   );   
   float3* sample_face_norms = reinterpret_cast<float3*>( ao_samples.sample_face_normals );
-  SampleInfo* sample_infos = ao_samples.sample_infos;
+  bake::SampleInfo* sample_infos = ao_samples.sample_infos;
 
   size_t sample_idx = 0;  // counter for entire mesh
   std::vector<size_t> tri_sample_counts(mesh.num_triangles, 0);
@@ -157,7 +168,8 @@ void bake::sample_surface_random(
   // First place minimum number of samples per triangle.
   for ( size_t tri_idx = 0; tri_idx < mesh.num_triangles; tri_idx++ )
   {
-    sample_triangle(tri_vertex_indices, verts, tri_normal_indices, normals, tri_idx, 0, min_samples_per_triangle,
+    sample_triangle(xform, xform_invtrans,
+      tri_vertex_indices, verts, tri_normal_indices, normals, tri_idx, 0, min_samples_per_triangle,
       sample_positions, sample_norms, sample_face_norms, sample_infos, sample_idx /*inout*/);
     tri_sample_counts[tri_idx] += min_samples_per_triangle;
   }
@@ -168,7 +180,7 @@ void bake::sample_surface_random(
   for ( size_t tri_idx = 0; tri_idx < mesh.num_triangles; tri_idx++ )
   {
     const int3& tri = tri_vertex_indices[tri_idx];
-    double area = triangle_area(verts[tri.x], verts[tri.y], verts[tri.z]);
+    double area = triangle_area(xform*verts[tri.x], xform*verts[tri.y], xform*verts[tri.z]);
     tri_areas[tri_idx] = area;
     mesh_area += area;
   }
@@ -177,7 +189,8 @@ void bake::sample_surface_random(
   for ( size_t tri_idx = 0; tri_idx < mesh.num_triangles && sample_idx < ao_samples.num_samples; tri_idx++ )
   {
     const size_t num_samples = std::min(ao_samples.num_samples - sample_idx, static_cast<size_t>(num_mesh_samples * tri_areas[tri_idx] / mesh_area));
-    sample_triangle(tri_vertex_indices, verts, tri_normal_indices, normals,
+    sample_triangle(xform, xform_invtrans,
+      tri_vertex_indices, verts, tri_normal_indices, normals,
       tri_idx, tri_sample_counts[tri_idx], tri_sample_counts[tri_idx] + num_samples, 
       sample_positions, sample_norms, sample_face_norms, sample_infos, sample_idx /*inout*/);
     tri_sample_counts[tri_idx] += num_samples;
@@ -186,7 +199,8 @@ void bake::sample_surface_random(
   // There could be a few samples left over. Place one sample per triangle until target sample count is reached. 
   assert( ao_samples.num_samples - sample_idx <= mesh.num_triangles );
   for ( size_t tri_idx = 0; tri_idx < mesh.num_triangles && sample_idx < ao_samples.num_samples; tri_idx++) {
-    sample_triangle(tri_vertex_indices, verts, tri_normal_indices, normals, 
+    sample_triangle(xform, xform_invtrans,
+      tri_vertex_indices, verts, tri_normal_indices, normals, 
       tri_idx, tri_sample_counts[tri_idx], tri_sample_counts[tri_idx] + 1,
       sample_positions, 
       sample_norms, sample_face_norms, sample_infos, sample_idx /*inout*/);
@@ -215,4 +229,31 @@ void bake::sample_surface_random(
 #endif
 
 }
+
+// entry point
+void bake::sample_surfaces_random(
+    const bake::Instance* instances,
+    const size_t num_instances,
+    const size_t min_samples_per_triangle,
+    const size_t requested_num_samples,
+    bake::AOSamples*  ao_samples
+    )
+{
+  size_t num_triangles = 0;
+  for (size_t i = 0; i < num_instances; ++i) {
+    num_triangles += instances[i].mesh->num_triangles;
+  }
+  const size_t num_samples = std::max(min_samples_per_triangle*num_triangles, requested_num_samples);
+
+  //stub from here
+  assert(num_instances == 1);
+  ao_samples[0].num_samples         = num_samples;
+  ao_samples[0].sample_positions    = new float[num_samples*3];
+  ao_samples[0].sample_normals      = new float[num_samples*3];
+  ao_samples[0].sample_face_normals = new float[num_samples*3];
+  ao_samples[0].sample_infos        = new bake::SampleInfo[num_samples*3];
+
+  sample_instance(instances[0], min_samples_per_triangle, ao_samples[0]);
+}
+
 

@@ -25,6 +25,7 @@
 #include "bake_util.h"
 
 #include <main.h>
+#include <optixu/optixu_matrix_namespace.h>
 
 #include <algorithm>
 #include <cassert>
@@ -179,41 +180,51 @@ int sample_main( int argc, const char** argv )
   }
 
   printTimeElapsed( timer ); 
-
-  int num_samples = config.num_samples;
-  if (num_samples < config.min_samples_per_face*mesh.indices.size()/3) {
-    num_samples = config.min_samples_per_face*int(mesh.indices.size()/3);
-  }
+  
   std::cerr << "Minimum samples per face: " << config.min_samples_per_face << std::endl;
-  std::cerr << "Total samples: " << num_samples << std::endl;
 
   //
-  // Populate bake::Mesh
+  // Populate instances
   //
-  bake::Mesh bake_mesh = { 0 };
-  bake_mesh.num_vertices  = mesh.positions.size();
-  bake_mesh.num_normals   = mesh.normals.size(); 
-  bake_mesh.num_triangles = mesh.indices.size()/3;
-  bake_mesh.vertices      = &mesh.positions[0];
-  bake_mesh.normals       = mesh.normals.empty() ? NULL : &mesh.normals[0];
-  bake_mesh.tri_vertex_indices = &mesh.indices[0];
-  bake_mesh.tri_normal_indices = mesh.normals.empty() ? NULL : &mesh.indices[0];  //Note: tinyobj flattens mesh data
+  const size_t num_user_meshes = 1;
+  const size_t num_instances_per_mesh = 1;
+  const size_t num_instances = num_user_meshes * num_instances_per_mesh;
+  std::vector<bake::Instance> instances;
+  instances.reserve(num_instances);
 
-  // Get bbox
+  for (size_t meshIdx = 0; meshIdx < num_user_meshes; ++meshIdx) {
+    
+    bake::Mesh* bake_mesh = new bake::Mesh;
+    bake_mesh->num_vertices  = mesh.positions.size();
+    bake_mesh->num_normals   = mesh.normals.size(); 
+    bake_mesh->num_triangles = mesh.indices.size()/3;
+    bake_mesh->vertices      = &mesh.positions[0];
+    bake_mesh->normals       = mesh.normals.empty() ? NULL : &mesh.normals[0];
+    bake_mesh->tri_vertex_indices = &mesh.indices[0];
+    bake_mesh->tri_normal_indices = mesh.normals.empty() ? NULL : &mesh.indices[0];  //Note: tinyobj flattens mesh data
 
-  std::fill(bake_mesh.bbox_min, bake_mesh.bbox_min+3, FLT_MAX);
-  std::fill(bake_mesh.bbox_max, bake_mesh.bbox_max+3, -FLT_MAX);
+    // Get bbox
 
+    std::fill(bake_mesh->bbox_min, bake_mesh->bbox_min+3, FLT_MAX);
+    std::fill(bake_mesh->bbox_max, bake_mesh->bbox_max+3, -FLT_MAX);
 
-  for (size_t i = 0; i < mesh.positions.size()/3; ++i) {
-    bake_mesh.bbox_min[0] = std::min(bake_mesh.bbox_min[0], mesh.positions[3*i]);
-    bake_mesh.bbox_max[0] = std::max(bake_mesh.bbox_max[0], mesh.positions[3*i]);
-    bake_mesh.bbox_min[1] = std::min(bake_mesh.bbox_min[1], mesh.positions[3*i+1]);
-    bake_mesh.bbox_max[1] = std::max(bake_mesh.bbox_max[1], mesh.positions[3*i+1]);
-    bake_mesh.bbox_min[2] = std::min(bake_mesh.bbox_min[2], mesh.positions[3*i+2]);
-    bake_mesh.bbox_max[2] = std::max(bake_mesh.bbox_max[2], mesh.positions[3*i+2]);
+    for (size_t i = 0; i < mesh.positions.size()/3; ++i) {
+      bake_mesh->bbox_min[0] = std::min(bake_mesh->bbox_min[0], mesh.positions[3*i]);
+      bake_mesh->bbox_max[0] = std::max(bake_mesh->bbox_max[0], mesh.positions[3*i]);
+      bake_mesh->bbox_min[1] = std::min(bake_mesh->bbox_min[1], mesh.positions[3*i+1]);
+      bake_mesh->bbox_max[1] = std::max(bake_mesh->bbox_max[1], mesh.positions[3*i+1]);
+      bake_mesh->bbox_min[2] = std::min(bake_mesh->bbox_min[2], mesh.positions[3*i+2]);
+      bake_mesh->bbox_max[2] = std::max(bake_mesh->bbox_max[2], mesh.positions[3*i+2]);
+    }
+
+    bake::Instance instance;
+    instance.mesh = bake_mesh; // leak
+    optix::Matrix4x4 mat = optix::Matrix4x4::identity();
+    const float* matdata = mat.getData();
+    std::copy(matdata, matdata+16, instance.xform);
+
+    instances.push_back(instance);
   }
-
 
   //
   // Generate AO samples
@@ -223,15 +234,19 @@ int sample_main( int argc, const char** argv )
 
   timer.reset();
   timer.start();
-  bake::AOSamples ao_samples = { 0 };
-  ao_samples.num_samples         = num_samples;
-  ao_samples.sample_positions    = new float[num_samples*3];
-  ao_samples.sample_normals      = new float[num_samples*3];
-  ao_samples.sample_face_normals = new float[num_samples*3];
-  ao_samples.sample_infos        = new bake::SampleInfo[num_samples*3];
 
-  bake::sampleSurface( bake_mesh, config.min_samples_per_face, ao_samples );
+  std::vector<bake::AOSamples> ao_samples(num_instances);
+  bake::sampleSurfaces( &instances[0], instances.size(), config.min_samples_per_face, config.num_samples, &ao_samples[0]);
+  
   printTimeElapsed( timer ); 
+
+  {
+    size_t total_samples = 0;
+    for (size_t i = 0; i < num_instances; ++i) {
+      total_samples += ao_samples[i].num_samples;
+    }
+    std::cerr << "Total samples: " << total_samples << std::endl;
+  }
 
   //
   // Evaluate AO samples 
@@ -240,23 +255,29 @@ int sample_main( int argc, const char** argv )
   
   timer.reset();
   timer.start();
-  float* ao_values = new float[ num_samples ];
-  bake::computeAO( bake_mesh, ao_samples, config.num_rays, ao_values );
+  float** ao_values = new float*[ num_instances ];
+  for (size_t i = 0; i < num_instances; ++i) {
+    ao_values[i] = new float[ ao_samples[i].num_samples ];
+  }
+  bake::computeAO( &instances[0], num_instances, &ao_samples[0], config.num_rays, ao_values );
   printTimeElapsed( timer ); 
 
   std::cerr << "Map AO to vertices  ...    "; std::cerr.flush();
 
   timer.reset();
   timer.start();
-  float* vertex_ao = new float[ bake_mesh.num_vertices ];
-  bake::mapAOToVertices( bake_mesh, ao_samples, ao_values, config.filter_mode, config.regularization_weight, vertex_ao );
+  float** vertex_ao = new float*[ num_instances ];
+  for (size_t i = 0; i < num_instances; ++i ) {
+    vertex_ao[i] = new float[ instances[i].mesh->num_vertices ];
+    bake::mapAOToVertices( *instances[i].mesh, ao_samples[i], ao_values[i], config.filter_mode, config.regularization_weight, vertex_ao[i] );
+  }
   printTimeElapsed( timer ); 
 
   //
   // Visualize results
   //
   std::cerr << "Launch viewer  ... \n" << std::endl;
-  bake::view( bake_mesh, vertex_ao );
+  bake::view( *instances[0].mesh, vertex_ao[0] );  // TODO
   
   return 1;
 }

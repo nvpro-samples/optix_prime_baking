@@ -33,26 +33,29 @@ using namespace optix;
 
 
 void bake::computeAO( 
-    const Mesh&       mesh,
-    const AOSamples&  ao_samples,
+    const Instance*   instances,
+    const size_t      num_instances,
+    const AOSamples*  ao_samples,
     int               rays_per_sample,
-    float*            ao_values 
+    float**           ao_values 
     )
 {
 
-  bake::ao_optix_prime( mesh, ao_samples, rays_per_sample, ao_values );
+  bake::ao_optix_prime( instances, num_instances, ao_samples, rays_per_sample, ao_values );
 
 }
 
 
-void bake::sampleSurface(
-    const Mesh& mesh,
+void bake::sampleSurfaces(
+    const Instance* instances,
+    const size_t num_instances,
     const size_t min_samples_per_triangle,
-    AOSamples&  ao_samples
+    const size_t requested_num_samples,
+    AOSamples*  ao_samples
     )
 {
 
-  bake::sample_surface_random( mesh, min_samples_per_triangle, ao_samples );
+  bake::sample_surfaces_random( instances, num_instances, min_samples_per_triangle, requested_num_samples, ao_samples );
 
 }
 

@@ -32,6 +32,7 @@
 #include "random.h"
 
 #include <algorithm>
+#include <float.h>
 #include <iostream>
 
 using namespace optix::prime;
@@ -46,44 +47,27 @@ do {                              \
 namespace
 {
 
-Model createModel( Context& context, const bake::Mesh& mesh )
+Model createInstances( Context& context, const bake::Instance* instances, const size_t num_instances, std::vector<Model>& models )
 {
-  Model model = context->createModel();
-  model->setTriangles(
-      mesh.num_triangles, RTP_BUFFER_TYPE_HOST, mesh.tri_vertex_indices,
-      mesh.num_vertices,  RTP_BUFFER_TYPE_HOST, mesh.vertices
-      );
-  model->update( 0 );
-  return model;
-}
-
-Model createInstances( Context& context, const bake::Mesh& mesh, std::vector<Model>& models )
-{
-  const int numInstances = 1;
-
-  // debug: same model for all instances
-  Model model = context->createModel();
-  model->setTriangles(
-      mesh.num_triangles, RTP_BUFFER_TYPE_HOST, mesh.tri_vertex_indices,
-      mesh.num_vertices,  RTP_BUFFER_TYPE_HOST, mesh.vertices
-      );
-  model->update( 0 );
-
-  // TODO: optimize for single model with identity xform
-  //if (1) return model;
-
-  std::vector<RTPmodel> instances(numInstances);
-  std::vector<optix::Matrix4x4> transforms(numInstances);
+  std::vector<RTPmodel> prime_instances(num_instances);
+  std::vector<optix::Matrix4x4> transforms(num_instances);
   Model scene = context->createModel();
 
-  // debug: same model, identity xform
-  for (int i = 0; i < numInstances; ++i) {
-    instances[i] = model->getRTPmodel();
-    transforms[i] = optix::Matrix4x4::identity();
+  for (int i = 0; i < num_instances; ++i) {
+    Model model = context->createModel();
+    const bake::Mesh& mesh = *instances[i].mesh;
+    model->setTriangles(
+        mesh.num_triangles, RTP_BUFFER_TYPE_HOST, mesh.tri_vertex_indices,
+        mesh.num_vertices,  RTP_BUFFER_TYPE_HOST, mesh.vertices
+        );
+    model->update( 0 );
+
+    prime_instances[i] = model->getRTPmodel();
+    transforms[i] = optix::Matrix4x4(instances[i].xform);
     models.push_back(model);  // Model is ref counted, so need to return it to prevent destruction
   }
 
-  scene->setInstances(numInstances, RTP_BUFFER_TYPE_HOST, &instances[0],
+  scene->setInstances(num_instances, RTP_BUFFER_TYPE_HOST, &prime_instances[0],
                       RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );
   scene->update( 0 );
   return scene;
@@ -94,10 +78,11 @@ Model createInstances( Context& context, const bake::Mesh& mesh, std::vector<Mod
 
 
 void bake::ao_optix_prime(
-    const bake::Mesh& mesh,
-    const bake::AOSamples& ao_samples,
+    const bake::Instance* instances,
+    const size_t num_instances,
+    const bake::AOSamples* ao_samples_per_instance,
     const int rays_per_sample,
-    float* ao_values
+    float** ao_values
     )
 {
 
@@ -106,58 +91,71 @@ void bake::ao_optix_prime(
 
   Context ctx = Context::create( RTP_CONTEXT_TYPE_CUDA );
   std::vector<Model> models;
-  Model   scene = createInstances( ctx, mesh, models );
+  Model   scene = createInstances( ctx, instances, num_instances, models );
   Query   query = scene->createQuery( RTP_QUERY_TYPE_ANY );
 
-  // Copy all necessary data to device
-  Buffer<float3> sample_normals     ( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
-  Buffer<float3> sample_face_normals( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
-  Buffer<float3> sample_positions   ( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
-  
-  cudaMemcpy( sample_normals.ptr(),      ao_samples.sample_normals,      sample_normals.sizeInBytes(),      cudaMemcpyHostToDevice );
-  cudaMemcpy( sample_face_normals.ptr(), ao_samples.sample_face_normals, sample_face_normals.sizeInBytes(), cudaMemcpyHostToDevice );
-  cudaMemcpy( sample_positions.ptr(),    ao_samples.sample_positions,    sample_positions.sizeInBytes(),    cudaMemcpyHostToDevice );
-  bake::AOSamples ao_samples_device;
-  ao_samples_device.num_samples = ao_samples.num_samples;
-  ao_samples_device.sample_normals      = reinterpret_cast<float*>( sample_normals.ptr() );
-  ao_samples_device.sample_face_normals = reinterpret_cast<float*>( sample_face_normals.ptr() );
-  ao_samples_device.sample_positions    = reinterpret_cast<float*>( sample_positions.ptr() );
-  ao_samples_device.sample_infos = 0;
-
-  Buffer<float> hits( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
-  Buffer<Ray>   rays( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
-  Buffer<float> ao  ( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
-  cudaMemset( ao.ptr(), 0, ao.sizeInBytes() );
-  
-  query->setRays( rays.count(), Ray::format,             rays.type(), rays.ptr() );
-  query->setHits( hits.count(), RTP_BUFFER_FORMAT_HIT_T, hits.type(), hits.ptr() );
-  setup_timer.stop();
+  const int sqrt_rays_per_sample = static_cast<int>( sqrtf( static_cast<float>( rays_per_sample ) ) + .5f );
 
   Timer raygen_timer;
   Timer query_timer;
   Timer updateao_timer;
-
-  const int sqrt_rays_per_sample = static_cast<int>( sqrtf( static_cast<float>( rays_per_sample ) ) + .5f );
-
-  const float scene_scale = std::max( std::max(mesh.bbox_max[0] - mesh.bbox_min[0],
-                                               mesh.bbox_max[1] - mesh.bbox_min[1]),
-                                               mesh.bbox_max[2] - mesh.bbox_min[2] );
-  float* frays = reinterpret_cast<float*>( rays.ptr() );
-  for( int i = 0; i < sqrt_rays_per_sample; ++i )
-  for( int j = 0; j < sqrt_rays_per_sample; ++j )
-  {
-    ACCUM_TIME( raygen_timer,   generateRaysDevice( i, j, sqrt_rays_per_sample, scene_scale, ao_samples_device, frays ) );
-    ACCUM_TIME( query_timer,    query->execute( 0 ) );
-    ACCUM_TIME( updateao_timer, updateAODevice( (int)ao_samples.num_samples, hits.ptr(), ao.ptr() ) );
-  }
-
-  // copy ao to ao_values
   Timer copyao_timer;
-  copyao_timer.start();
-  cudaMemcpy( ao_values, ao.ptr(), ao.sizeInBytes(), cudaMemcpyDeviceToHost ); 
-  for( size_t  i = 0; i < ao.count(); ++i )
-    ao_values[i] = 1.0f - ao_values[i] / rays_per_sample; 
-  copyao_timer.stop();
+
+  for (size_t idx = 0; idx < num_instances; ++idx) {
+
+    const bake::AOSamples& ao_samples = ao_samples_per_instance[idx];
+
+    // Copy all necessary data to device
+    Buffer<float3> sample_normals     ( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
+    Buffer<float3> sample_face_normals( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
+    Buffer<float3> sample_positions   ( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
+    
+    cudaMemcpy( sample_normals.ptr(),      ao_samples.sample_normals,      sample_normals.sizeInBytes(),      cudaMemcpyHostToDevice );
+    cudaMemcpy( sample_face_normals.ptr(), ao_samples.sample_face_normals, sample_face_normals.sizeInBytes(), cudaMemcpyHostToDevice );
+    cudaMemcpy( sample_positions.ptr(),    ao_samples.sample_positions,    sample_positions.sizeInBytes(),    cudaMemcpyHostToDevice );
+    bake::AOSamples ao_samples_device;
+    ao_samples_device.num_samples = ao_samples.num_samples;
+    ao_samples_device.sample_normals      = reinterpret_cast<float*>( sample_normals.ptr() );
+    ao_samples_device.sample_face_normals = reinterpret_cast<float*>( sample_face_normals.ptr() );
+    ao_samples_device.sample_positions    = reinterpret_cast<float*>( sample_positions.ptr() );
+    ao_samples_device.sample_infos = 0;
+
+    Buffer<float> hits( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
+    Buffer<Ray>   rays( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
+    Buffer<float> ao  ( ao_samples.num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
+    cudaMemset( ao.ptr(), 0, ao.sizeInBytes() );
+    
+    query->setRays( rays.count(), Ray::format,             rays.type(), rays.ptr() );
+    query->setHits( hits.count(), RTP_BUFFER_FORMAT_HIT_T, hits.type(), hits.ptr() );
+    setup_timer.stop();
+
+    const optix::Matrix4x4 xform(instances[idx].xform);
+    const float* bmin = instances[idx].mesh->bbox_min;
+    const float* bmax = instances[idx].mesh->bbox_max;
+    const float3 bbox_min = make_float3(xform*make_float4(bmin[0], bmin[1], bmin[2], 1.0f));
+    const float3 bbox_max = make_float3(xform*make_float4(bmax[0], bmax[1], bmax[2], 1.0f));
+    const float scene_scale = std::max( std::max(bbox_max.x - bbox_min.x,
+                                                 bbox_max.y - bbox_min.y),
+                                                 bbox_max.z - bbox_min.z );
+
+    float* frays = reinterpret_cast<float*>( rays.ptr() );
+    for( int i = 0; i < sqrt_rays_per_sample; ++i )
+    for( int j = 0; j < sqrt_rays_per_sample; ++j )
+    {
+      // TODO: vary rays per mesh
+      ACCUM_TIME( raygen_timer,   generateRaysDevice( i, j, sqrt_rays_per_sample, scene_scale, ao_samples_device, frays ) );
+      ACCUM_TIME( query_timer,    query->execute( 0 ) );
+      ACCUM_TIME( updateao_timer, updateAODevice( (int)ao_samples.num_samples, hits.ptr(), ao.ptr() ) );
+    }
+
+    // copy ao to ao_values
+    copyao_timer.start();
+    cudaMemcpy( ao_values[idx], ao.ptr(), ao.sizeInBytes(), cudaMemcpyDeviceToHost ); 
+    for( size_t  i = 0; i < ao.count(); ++i )
+      ao_values[idx][i] = 1.0f - ao_values[idx][i] / rays_per_sample; 
+    copyao_timer.stop();
+
+  }
 
   std::cerr << "\n\tsetup ...           ";  printTimeElapsed( setup_timer );
   std::cerr << "\taccum raygen ...    ";  printTimeElapsed( raygen_timer );

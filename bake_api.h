@@ -50,6 +50,12 @@ struct Mesh
   float     bbox_max[3];
 };
 
+struct Instance
+{
+  float xform[16];  // 4x4 row major
+  Mesh *mesh;
+};
+
 
 struct AOSamples
 {
@@ -68,18 +74,21 @@ enum VertexFilterMode
 };
 
 
-void sampleSurface(
-    const Mesh& mesh,
-    size_t min_samples_per_triangle,
-    AOSamples&  ao_samples
+void sampleSurfaces(
+    const Instance* instances,
+    const size_t    num_instances,
+    const size_t    min_samples_per_triangle,
+    const size_t    requested_num_samples,
+    AOSamples*      ao_samples  // output, per instance
     );
 
 
 void computeAO( 
-    const Mesh&       mesh,
-    const AOSamples&  ao_samples,
-    int               rays_per_sample,
-    float*            ao_values 
+    const Instance*  instances,
+    const size_t     num_instances,
+    const AOSamples* ao_samples,
+    int              rays_per_sample,
+    float**          ao_values 
     );
 
 
