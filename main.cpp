@@ -146,6 +146,38 @@ struct Config {
 
 };
 
+namespace {
+
+  void make_debug_instances(bake::Mesh* bake_mesh, size_t n, std::vector<bake::Instance>& instances)
+  {
+
+    // Make up a transform per instance
+    const float3 bbox_base = optix::make_float3(0.5f*(bake_mesh->bbox_min[0] + bake_mesh->bbox_max[0]),
+                                                      bake_mesh->bbox_min[1],
+                                                0.5f*(bake_mesh->bbox_min[2] + bake_mesh->bbox_max[2]));
+    const float3 translation = 1.01*optix::make_float3(bake_mesh->bbox_max[0] - bake_mesh->bbox_min[0], 0.0f, 0.0f);
+    const float rot = M_PI/6.0f;
+    const float3 rot_axis = optix::make_float3(0.0f, 1.0f, 0.0f);
+    const float scale_factor = 0.8f;
+    float scale = scale_factor;
+    for (size_t i = 0; i < n; i++) {
+      bake::Instance instance;
+      instance.mesh = bake_mesh;
+      const optix::Matrix4x4 mat = optix::Matrix4x4::translate((i+1)*translation) *
+                                   optix::Matrix4x4::translate(bbox_base) *
+                                   optix::Matrix4x4::rotate((i+1)*rot, rot_axis) *
+                                   optix::Matrix4x4::scale(optix::make_float3(scale)) *
+                                   optix::Matrix4x4::translate(-bbox_base);
+      scale *= scale_factor;
+
+      const float* matdata = mat.getData();
+      std::copy(matdata, matdata+16, instance.xform);
+      instances.push_back(instance);
+    }
+  }
+
+}
+
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
@@ -203,29 +235,28 @@ int sample_main( int argc, const char** argv )
     bake_mesh->tri_vertex_indices = &mesh.indices[0];
     bake_mesh->tri_normal_indices = mesh.normals.empty() ? NULL : &mesh.indices[0];  //Note: tinyobj flattens mesh data
 
-    // Get bbox
+    // Build bbox for mesh
 
     std::fill(bake_mesh->bbox_min, bake_mesh->bbox_min+3, FLT_MAX);
     std::fill(bake_mesh->bbox_max, bake_mesh->bbox_max+3, -FLT_MAX);
-
     for (size_t i = 0; i < mesh.positions.size()/3; ++i) {
-      bake_mesh->bbox_min[0] = std::min(bake_mesh->bbox_min[0], mesh.positions[3*i]);
-      bake_mesh->bbox_max[0] = std::max(bake_mesh->bbox_max[0], mesh.positions[3*i]);
-      bake_mesh->bbox_min[1] = std::min(bake_mesh->bbox_min[1], mesh.positions[3*i+1]);
-      bake_mesh->bbox_max[1] = std::max(bake_mesh->bbox_max[1], mesh.positions[3*i+1]);
-      bake_mesh->bbox_min[2] = std::min(bake_mesh->bbox_min[2], mesh.positions[3*i+2]);
-      bake_mesh->bbox_max[2] = std::max(bake_mesh->bbox_max[2], mesh.positions[3*i+2]);
+      for (size_t k = 0; k < 3; ++k) {
+        bake_mesh->bbox_min[k] = std::min(bake_mesh->bbox_min[k], mesh.positions[3*i+k]);
+        bake_mesh->bbox_max[k] = std::max(bake_mesh->bbox_max[k], mesh.positions[3*i+k]);
+      }
     }
 
-    for (size_t instanceIdx = 0; instanceIdx < num_instances_per_mesh; instanceIdx++) {
-      bake::Instance instance;
-      instance.mesh = bake_mesh; // leak
-      optix::Matrix4x4 mat = optix::Matrix4x4::identity();
-      const float* matdata = mat.getData();
-      std::copy(matdata, matdata+16, instance.xform);
+    // Make instance
 
-      instances.push_back(instance);
-    }
+    bake::Instance instance;
+    instance.mesh = bake_mesh;  //leak
+    const optix::Matrix4x4 mat = optix::Matrix4x4::identity();  // TODO: use transform from file
+    const float* matdata = mat.getData();
+    std::copy(matdata, matdata+16, instance.xform);
+    instances.push_back(instance);
+
+    if (num_instances_per_mesh > 1) make_debug_instances(bake_mesh, num_instances_per_mesh-1, instances);
+    
   }
 
   assert(instances.size() == num_instances);
@@ -275,7 +306,7 @@ int sample_main( int argc, const char** argv )
   // Visualize results
   //
   std::cerr << "Launch viewer  ... \n" << std::endl;
-  bake::view( *instances[0].mesh, vertex_ao[0] );  // TODO
+  bake::view( &instances[0], instances.size(), vertex_ao );
   
   return 1;
 }

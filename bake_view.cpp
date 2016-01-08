@@ -43,20 +43,17 @@ const char* fragment_program =
 class MyWindow: public WindowInertiaCamera
 {
 private:
-  const float* m_positions;
-  const float* m_vertex_ao;
-  const size_t m_vertex_count;
-  const unsigned int* m_indices;
-  const size_t m_triangle_count;
+  const bake::Instance* m_instances;
+  const size_t m_num_instances;
+  float const* const* m_vertex_ao;
+  std::vector<GLuint> m_vaos;
 
 public:
   GLSLProgram m_prog;
 
-  MyWindow(const float* positions, 
-           const float* vertex_ao,
-           const size_t vertex_count,
-           const unsigned int* indices,
-           const size_t triangle_count,
+  MyWindow(const bake::Instance* instances,
+           const size_t num_instances,
+           float const* const* vertex_ao,
            // Initial camera params
            const vec3f& eye,
            const vec3f& lookat,
@@ -64,11 +61,9 @@ public:
            const float clipnear,
            const float clipfar)
   : WindowInertiaCamera(eye, lookat, lookat, fov, clipnear, clipfar), 
-    m_positions(positions),
+    m_instances(instances),
+    m_num_instances(num_instances),
     m_vertex_ao(vertex_ao),
-    m_vertex_count(vertex_count),
-    m_indices(indices),
-    m_triangle_count(triangle_count),
     m_prog("Mesh Program") {}
 
   virtual bool init()
@@ -77,33 +72,40 @@ public:
 
     if (!m_prog.compileProgram(vertex_program, NULL, fragment_program)) return false;
 
-    GLuint vao = 0;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
+    m_vaos.resize(m_num_instances);
+    glGenVertexArrays(m_num_instances, &m_vaos[0]);
+    for (size_t i = 0; i < m_num_instances; ++i) {
+      glBindVertexArray(m_vaos[i]);
 
-    // Vertex attributes
+      // Vertex attributes
 
-    GLuint vbos[] = {0, 0};
-    glGenBuffers(2, vbos);
+      GLuint vbos[] = {0, 0};
+      glGenBuffers(2, vbos);
 
-    // Positions
-    glBindBuffer(GL_ARRAY_BUFFER, vbos[0]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float)*m_vertex_count*3, m_positions, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, /*stride*/ 0, /*offset*/ 0);
-    glEnableVertexAttribArray(0);
+      // Positions
+      glBindBuffer(GL_ARRAY_BUFFER, vbos[0]);
 
-    // Occlusion values
-    glBindBuffer(GL_ARRAY_BUFFER, vbos[1]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float)*m_vertex_count, m_vertex_ao, GL_STATIC_DRAW);
-    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, /*stride*/ 0, /*offset*/ 0);
-    glEnableVertexAttribArray(1);
+      const size_t vertex_count = m_instances[i].mesh->num_vertices;
+      const float* positions = m_instances[i].mesh->vertices;
+      glBufferData(GL_ARRAY_BUFFER, sizeof(float)*vertex_count*3, positions, GL_STATIC_DRAW);
+      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, /*stride*/ 0, /*offset*/ 0);
+      glEnableVertexAttribArray(0);
 
-    // Vertex indices
+      // Occlusion values
+      glBindBuffer(GL_ARRAY_BUFFER, vbos[1]);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(float)*vertex_count, m_vertex_ao[i], GL_STATIC_DRAW);
+      glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, /*stride*/ 0, /*offset*/ 0);
+      glEnableVertexAttribArray(1);
 
-    GLuint ebo;
-    glGenBuffers(1, &ebo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int)*m_triangle_count*3, m_indices, GL_STATIC_DRAW);
+      // Vertex indices
+
+      GLuint ebo;
+      glGenBuffers(1, &ebo);
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+      const size_t triangle_count = m_instances[i].mesh->num_triangles;
+      const unsigned int* indices = m_instances[i].mesh->tri_vertex_indices; 
+      glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int)*triangle_count*3, indices, GL_STATIC_DRAW);
+    }
 
     glEnable(GL_DEPTH_TEST);
 
@@ -119,10 +121,20 @@ public:
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     m_prog.enable();
-    m_prog.setUniformMatrix4fv("xform", world2screen.mat_array, false);
+    for (size_t i = 0; i < m_num_instances; ++i) {
+      
+      glBindVertexArray(m_vaos[i]);
 
-    const GLsizei num_indices = static_cast<GLsizei>(m_triangle_count*3);
-    glDrawElements(GL_TRIANGLES, num_indices, GL_UNSIGNED_INT, 0);
+      mat4f object2world(m_instances[i].xform);
+      object2world = transpose(object2world);  // optix matrices are transposed from opengl
+
+      mat4f object2screen = world2screen*object2world;
+      m_prog.setUniformMatrix4fv("xform", object2screen.mat_array, false);
+
+      const size_t num_triangles = m_instances[i].mesh->num_triangles;
+      const GLsizei num_indices = static_cast<GLsizei>(num_triangles*3);
+      glDrawElements(GL_TRIANGLES, num_indices, GL_UNSIGNED_INT, 0);
+    }
 
     swapBuffers();
   }
@@ -144,11 +156,22 @@ public:
 
 namespace bake {
 
-  void view( const bake::Mesh& bake_mesh, const float* vertex_colors )
+  void view( const bake::Instance* instances, const size_t num_instances, float const* const* vertex_colors )
   {
 
-    vec3f bbox_min(bake_mesh.bbox_min[0], bake_mesh.bbox_min[1], bake_mesh.bbox_min[2]);
-    vec3f bbox_max(bake_mesh.bbox_max[0], bake_mesh.bbox_max[1], bake_mesh.bbox_max[2]);
+    // bbox for all instances
+    vec3f bbox_min(FLT_MAX, FLT_MAX, FLT_MAX);
+    vec3f bbox_max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+    for (size_t i = 0; i < num_instances; ++i) {
+      mat4f object2world(instances[i].xform);
+      object2world = transpose(object2world);  // optix matrixes are transposed from opengl
+      vec3f instance_bbox_min = object2world*vec3f(instances[i].mesh->bbox_min);
+      vec3f instance_bbox_max = object2world*vec3f(instances[i].mesh->bbox_max);
+      for(size_t k = 0; k < 3; ++k) {
+        bbox_min[k] = std::min(bbox_min[k], instance_bbox_min[k]);
+        bbox_max[k] = std::max(bbox_max[k], instance_bbox_max[k]);
+      }
+    }
     const vec3f center = 0.5f*(bbox_min + bbox_max);
     const vec3f bbox_extents = bbox_max - bbox_min;
     const float max_extent = std::max( std::max(bbox_extents[0], bbox_extents[1]), bbox_extents[2]);
@@ -160,8 +183,7 @@ namespace bake {
     const float clipnear = 0.01f*max_extent;
     const float clipfar = 10.0f*max_extent;
 
-    static MyWindow window(bake_mesh.vertices, vertex_colors, bake_mesh.num_vertices, bake_mesh.tri_vertex_indices, bake_mesh.num_triangles,
-      eye, lookat, fov, clipnear, clipfar);
+    static MyWindow window(instances, num_instances, vertex_colors, eye, lookat, fov, clipnear, clipfar);
 
     NVPWindow::ContextFlags context(
       1,      //major;
