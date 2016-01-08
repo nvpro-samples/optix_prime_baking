@@ -41,6 +41,7 @@ const size_t SAMPLES_PER_FACE = 3;
 // For parsing command line into constants
 struct Config {
   std::string obj_filename;
+  size_t num_instances_per_mesh;
   int num_samples;
   int min_samples_per_face;
   int num_rays;
@@ -54,6 +55,7 @@ struct Config {
 #else
     obj_filename = std::string( "./assets/lucy.obj" );
 #endif
+    num_instances_per_mesh = 1;
     num_samples = 0;  // default means determine from mesh
     min_samples_per_face = SAMPLES_PER_FACE;
     num_rays    = NUM_RAYS; 
@@ -76,6 +78,14 @@ struct Config {
       {
         obj_filename = argv[++i];
       } 
+      else if ( (arg == "-i" || arg == "--instances") && i+1 < argc )
+      {
+        int n = -1;
+        if( (sscanf( argv[++i], "%d", &n ) != 1) || n < 1 ) {
+          printParseErrorAndExit( argv[0], arg, argv[i] );
+        }
+        num_instances_per_mesh = static_cast<size_t>(n);
+      }
       else if ( (arg == "-s" || arg == "--samples") && i+1 < argc )
       {
         if( sscanf( argv[++i], "%d", &num_samples ) != 1 ) {
@@ -128,6 +138,7 @@ struct Config {
     << "  -h  | --help                          Print this usage message\n"
     << "  -l  | --least_squares <0|1>           Enable or disable least squares filtering (default 1 if built with Eigen3)\n"
     << "  -o  | --obj <obj_file>                Specify model to be rendered\n"
+    << "  -i  | --instances <n>                 Number of instances per mesh (default 1).  For testing.\n"
     << "  -r  | --rays    <n>                   Number of rays per sample point for gather (default " << NUM_RAYS << ")\n"
     << "  -s  | --samples <n>                   Number of sample points on mesh (default " << SAMPLES_PER_FACE << " per face; any extra samples are based on area)\n"
     << "  -t  | --samples_per_face <n>          Minimum number of samples per face (default " << SAMPLES_PER_FACE << ")\n"
@@ -155,20 +166,23 @@ namespace {
     const float3 bbox_base = optix::make_float3(0.5f*(bake_mesh->bbox_min[0] + bake_mesh->bbox_max[0]),
                                                       bake_mesh->bbox_min[1],
                                                 0.5f*(bake_mesh->bbox_min[2] + bake_mesh->bbox_max[2]));
-    const float3 translation = 1.01*optix::make_float3(bake_mesh->bbox_max[0] - bake_mesh->bbox_min[0], 0.0f, 0.0f);
     const float rot = M_PI/6.0f;
     const float3 rot_axis = optix::make_float3(0.0f, 1.0f, 0.0f);
-    const float scale_factor = 0.8f;
+    const float scale_factor = 0.9f;
     float scale = scale_factor;
+    const float3 base_translation = 1.01*optix::make_float3(bake_mesh->bbox_max[0] - bake_mesh->bbox_min[0], 0.0f, 0.0f);
+    float3 translation = scale_factor* base_translation;
+
     for (size_t i = 0; i < n; i++) {
       bake::Instance instance;
       instance.mesh = bake_mesh;
-      const optix::Matrix4x4 mat = optix::Matrix4x4::translate((i+1)*translation) *
+      const optix::Matrix4x4 mat = optix::Matrix4x4::translate(translation) *
                                    optix::Matrix4x4::translate(bbox_base) *
                                    optix::Matrix4x4::rotate((i+1)*rot, rot_axis) *
                                    optix::Matrix4x4::scale(optix::make_float3(scale)) *
                                    optix::Matrix4x4::translate(-bbox_base);
       scale *= scale_factor;
+      translation += scale*base_translation;
 
       const float* matdata = mat.getData();
       std::copy(matdata, matdata+16, instance.xform);
@@ -219,8 +233,7 @@ int sample_main( int argc, const char** argv )
   // Populate instances
   //
   const size_t num_user_meshes = 1;
-  const size_t num_instances_per_mesh = 1;
-  const size_t num_instances = num_user_meshes * num_instances_per_mesh;
+  const size_t num_instances = num_user_meshes * config.num_instances_per_mesh;
   std::vector<bake::Instance> instances;
   instances.reserve(num_instances);
 
@@ -255,7 +268,7 @@ int sample_main( int argc, const char** argv )
     std::copy(matdata, matdata+16, instance.xform);
     instances.push_back(instance);
 
-    if (num_instances_per_mesh > 1) make_debug_instances(bake_mesh, num_instances_per_mesh-1, instances);
+    if (config.num_instances_per_mesh > 1) make_debug_instances(bake_mesh, config.num_instances_per_mesh-1, instances);
     
   }
 

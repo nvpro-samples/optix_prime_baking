@@ -297,8 +297,7 @@ size_t bake::sample_surfaces_random(
     ao_samples[idx].sample_infos        = new bake::SampleInfo[n*3];
     sample_instance(instances[idx], min_samples_per_triangle, ao_samples[idx]);
 
-    //debug
-    std::cerr << "sample for instance(" << idx << "): " << n << std::endl;
+    std::cerr << "sampled instance " << idx << ": " << n << std::endl;
   }
 
   return num_samples;
