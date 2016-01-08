@@ -11,7 +11,8 @@
 const char* vertex_program = 
 "#version 330\n"
 "#extension GL_ARB_separate_shader_objects : enable\n"
-"uniform mat4 xform;\n"
+"uniform mat4 object2world;\n"
+"uniform mat4 world2screen;\n"
 "layout(location=0) in vec3 P;\n"
 "layout(location=1) in float occl;\n"
 "out gl_PerVertex {\n"
@@ -20,8 +21,7 @@ const char* vertex_program =
 "layout(location=0) out vec3 outColor;\n"
 "void main() {\n"
 "   outColor = vec3(occl, occl, occl);\n"
-"   gl_Position = xform * vec4(P, 1.0);\n"
-"   //gl_Position = vec4(P, 1.0);\n"
+"   gl_Position = world2screen * object2world * vec4(P, 1.0);\n"
 "}\n"
 ;
 
@@ -117,6 +117,7 @@ public:
     WindowInertiaCamera::display();
 
     mat4f world2screen = m_projection * m_camera.m4_view;
+    m_prog.setUniformMatrix4fv("world2screen", world2screen.mat_array, /*transpose*/ false);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
@@ -125,11 +126,8 @@ public:
       
       glBindVertexArray(m_vaos[i]);
 
-      mat4f object2world(m_instances[i].xform);
-      object2world = transpose(object2world);  // optix matrices are transposed from opengl
-
-      mat4f object2screen = world2screen*object2world;
-      m_prog.setUniformMatrix4fv("xform", object2screen.mat_array, false);
+      // Note: optix matrix is transposed from opengl
+      m_prog.setUniformMatrix4fv("object2world", const_cast<GLfloat*>(m_instances[i].xform), /*transpose*/ true);
 
       const size_t num_triangles = m_instances[i].mesh->num_triangles;
       const GLsizei num_indices = static_cast<GLsizei>(num_triangles*3);
