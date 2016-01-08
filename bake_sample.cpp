@@ -53,11 +53,6 @@ float halton(const unsigned int index)
 float3 faceforward( const float3& normal, const float3& geom_normal )
 {
   if ( optix::dot( normal, geom_normal ) > 0.0f ) return normal;
-  static int warned = 0;
-  if (!warned) {
-    std::cerr << "WARNING: Reversing vertex normals to point in same direction as face normals" << std::endl;
-    warned = 1;
-  }
   return -normal;
 }
 
