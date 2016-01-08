@@ -231,7 +231,7 @@ void sample_instance(
 }
 
 // entry point
-void bake::sample_surfaces_random(
+size_t bake::sample_surfaces_random(
     const bake::Instance* instances,
     const size_t num_instances,
     const size_t min_samples_per_triangle,
@@ -239,21 +239,70 @@ void bake::sample_surfaces_random(
     bake::AOSamples*  ao_samples
     )
 {
+
+  // First place minimum samples per instance
+
   size_t num_triangles = 0;
+  size_t sample_count = 0;  // For entire scene
   for (size_t i = 0; i < num_instances; ++i) {
+    ao_samples[i].num_samples = min_samples_per_triangle * instances[i].mesh->num_triangles; 
+    sample_count += ao_samples[i].num_samples;
     num_triangles += instances[i].mesh->num_triangles;
   }
   const size_t num_samples = std::max(min_samples_per_triangle*num_triangles, requested_num_samples);
 
-  //stub from here
-  assert(num_instances == 1);
-  ao_samples[0].num_samples         = num_samples;
-  ao_samples[0].sample_positions    = new float[num_samples*3];
-  ao_samples[0].sample_normals      = new float[num_samples*3];
-  ao_samples[0].sample_face_normals = new float[num_samples*3];
-  ao_samples[0].sample_infos        = new bake::SampleInfo[num_samples*3];
+  if (num_samples > sample_count) {
 
-  sample_instance(instances[0], min_samples_per_triangle, ao_samples[0]);
+    // Area-based sampling
+
+    // Compute surface area of each instance
+    double total_area = 0.0;
+    std::vector<double> instance_areas(num_instances);
+    std::fill(instance_areas.begin(), instance_areas.end(), 0.0);
+    for (size_t idx = 0; idx < num_instances; ++idx) {
+      const bake::Mesh& mesh = *instances[idx].mesh;
+      const optix::Matrix4x4 xform(instances[idx].xform);
+      const int3* tri_vertex_indices  = reinterpret_cast<int3*>( mesh.tri_vertex_indices );
+      const float3* verts = reinterpret_cast<float3*>( mesh.vertices );
+      for (size_t tri_idx = 0; tri_idx < mesh.num_triangles; ++tri_idx) {
+        const int3& tri = tri_vertex_indices[tri_idx];
+        double area = triangle_area(xform*verts[tri.x], xform*verts[tri.y], xform*verts[tri.z]);
+        instance_areas[idx] += area;
+      }
+      total_area += instance_areas[idx];
+    }
+
+    const size_t num_area_based_samples = num_samples - sample_count;
+    for (size_t idx = 0; idx < num_instances && sample_count < num_samples; ++idx) {
+      const size_t n = std::min(num_samples - sample_count, static_cast<size_t>(num_area_based_samples * instance_areas[idx] / total_area));
+      ao_samples[idx].num_samples += n;
+      sample_count += n;
+    }
+
+    // There could be a few samples left over. Place one sample per instance until target sample count is reached.
+    assert( num_samples - sample_count <= num_instances );
+    for (size_t idx = 0; idx < num_instances && sample_count < num_samples; ++idx) {
+      ao_samples[idx].num_samples += 1;
+      sample_count += 1;
+    }
+
+  }
+
+  assert(sample_count == num_samples);
+  for (size_t idx = 0; idx < num_instances; ++idx) {
+    const size_t n = ao_samples[idx].num_samples;
+    ao_samples[idx].sample_positions    = new float[n*3];
+    ao_samples[idx].sample_normals      = new float[n*3];
+    ao_samples[idx].sample_face_normals = new float[n*3];
+    ao_samples[idx].sample_infos        = new bake::SampleInfo[n*3];
+    sample_instance(instances[idx], min_samples_per_triangle, ao_samples[idx]);
+
+    //debug
+    std::cerr << "sample for instance(" << idx << "): " << n << std::endl;
+  }
+
+  return num_samples;
+
 }
 
 

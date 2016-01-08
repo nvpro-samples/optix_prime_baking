@@ -74,7 +74,7 @@ enum VertexFilterMode
 };
 
 
-void sampleSurfaces(
+size_t sampleSurfaces(
     const Instance* instances,
     const size_t    num_instances,
     const size_t    min_samples_per_triangle,

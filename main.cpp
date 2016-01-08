@@ -217,14 +217,18 @@ int sample_main( int argc, const char** argv )
       bake_mesh->bbox_max[2] = std::max(bake_mesh->bbox_max[2], mesh.positions[3*i+2]);
     }
 
-    bake::Instance instance;
-    instance.mesh = bake_mesh; // leak
-    optix::Matrix4x4 mat = optix::Matrix4x4::identity();
-    const float* matdata = mat.getData();
-    std::copy(matdata, matdata+16, instance.xform);
+    for (size_t instanceIdx = 0; instanceIdx < num_instances_per_mesh; instanceIdx++) {
+      bake::Instance instance;
+      instance.mesh = bake_mesh; // leak
+      optix::Matrix4x4 mat = optix::Matrix4x4::identity();
+      const float* matdata = mat.getData();
+      std::copy(matdata, matdata+16, instance.xform);
 
-    instances.push_back(instance);
+      instances.push_back(instance);
+    }
   }
+
+  assert(instances.size() == num_instances);
 
   //
   // Generate AO samples
@@ -236,17 +240,11 @@ int sample_main( int argc, const char** argv )
   timer.start();
 
   std::vector<bake::AOSamples> ao_samples(num_instances);
-  bake::sampleSurfaces( &instances[0], instances.size(), config.min_samples_per_face, config.num_samples, &ao_samples[0]);
+  const size_t total_samples = bake::sampleSurfaces( &instances[0], instances.size(), config.min_samples_per_face, config.num_samples, &ao_samples[0]);
   
   printTimeElapsed( timer ); 
 
-  {
-    size_t total_samples = 0;
-    for (size_t i = 0; i < num_instances; ++i) {
-      total_samples += ao_samples[i].num_samples;
-    }
-    std::cerr << "Total samples: " << total_samples << std::endl;
-  }
+  std::cerr << "Total samples: " << total_samples << std::endl;
 
   //
   // Evaluate AO samples 

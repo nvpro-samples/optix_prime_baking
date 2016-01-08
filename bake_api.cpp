@@ -46,7 +46,7 @@ void bake::computeAO(
 }
 
 
-void bake::sampleSurfaces(
+size_t bake::sampleSurfaces(
     const Instance* instances,
     const size_t num_instances,
     const size_t min_samples_per_triangle,
@@ -55,7 +55,7 @@ void bake::sampleSurfaces(
     )
 {
 
-  bake::sample_surfaces_random( instances, num_instances, min_samples_per_triangle, requested_num_samples, ao_samples );
+  return bake::sample_surfaces_random( instances, num_instances, min_samples_per_triangle, requested_num_samples, ao_samples );
 
 }
 
