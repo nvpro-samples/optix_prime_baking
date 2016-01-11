@@ -64,6 +64,7 @@ void generateRaysKernel(
   const float3 sample_face_norm = sample_face_normals[idx];
   const float3 sample_pos       = sample_positions[idx];
   const float3 ray_origin       = sample_pos + 0.01f * scene_scale * sample_norm;
+  optix::Onb onb( sample_norm );
 
   float3 ray_dir;
   float u0 = ( static_cast<float>( px ) + rnd( seed ) ) / static_cast<float>( sqrt_passes );
@@ -73,7 +74,6 @@ void generateRaysKernel(
   {
     optix::cosine_sample_hemisphere( u0, u1, ray_dir );
 
-    optix::Onb onb( sample_norm );
     onb.inverse_transform( ray_dir );
     ++j;
     u0 = rnd( seed );
