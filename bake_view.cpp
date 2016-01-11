@@ -48,6 +48,9 @@ private:
   float const* const* m_vertex_ao;
   std::vector<GLuint> m_vaos;
 
+  const vec3f m_initial_eye;
+  const vec3f m_initial_lookat;
+
 public:
   GLSLProgram m_prog;
 
@@ -64,6 +67,8 @@ public:
     m_instances(instances),
     m_num_instances(num_instances),
     m_vertex_ao(vertex_ao),
+    m_initial_eye(eye),
+    m_initial_lookat(lookat),
     m_prog("Mesh Program") {}
 
   virtual bool init()
@@ -145,6 +150,15 @@ public:
       case 'Q':
         postQuit();
         break;
+      case 'f':  // frame the scene
+      case 'F':
+      {
+        const vec3f current_view_vector = normalize(m_camera.curFocusPos - m_camera.curEyePos);
+        const float initial_view_dist = length(m_initial_lookat - m_initial_eye);
+        m_camera.look_at(vec3f(m_initial_lookat - initial_view_dist*current_view_vector), m_initial_lookat, /*reset*/ true);
+        break;
+      }
+
     }
   }
   
