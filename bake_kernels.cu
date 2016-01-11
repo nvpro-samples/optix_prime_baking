@@ -29,12 +29,6 @@
 using optix::float3;
 
 
-struct Ray
-{
-  float3 origin;
-  float3 direction;
-};
-
 
 inline int idivCeil( int x, int y )                                              
 {                                                                                
@@ -93,7 +87,7 @@ void generateRaysKernel(
 }
 
 __host__
-void bake::generateRaysDevice( int px, int py, int sqrt_passes, float scene_scale, const bake::AOSamples& ao_samples, float* rays )
+void bake::generateRaysDevice( int px, int py, int sqrt_passes, float scene_scale, const bake::AOSamples& ao_samples, Ray* rays )
 {
   const int block_size  = 512;                                                           
   const int block_count = idivCeil( (int)ao_samples.num_samples, block_size );                              
@@ -107,7 +101,7 @@ void bake::generateRaysDevice( int px, int py, int sqrt_passes, float scene_scal
       (float3*)ao_samples.sample_normals,
       (float3*)ao_samples.sample_face_normals,
       (float3*)ao_samples.sample_positions,
-      (Ray*)rays
+      rays
       );
 }
 

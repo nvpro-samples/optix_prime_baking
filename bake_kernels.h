@@ -22,13 +22,15 @@
 
 #pragma once
 
+#include "bake_util.h"
+
 
 namespace bake
 {
 
 struct AOSamples;
 
-void generateRaysDevice( int px, int py, int sqrt_passes, float scene_scale, const bake::AOSamples& ao_samples, float* rays );
+void generateRaysDevice( int px, int py, int sqrt_passes, float scene_scale, const bake::AOSamples& ao_samples, Ray* rays );
 void updateAODevice( int num_samples, const float* hits, float* ao );
 
 }
