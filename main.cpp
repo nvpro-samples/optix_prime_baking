@@ -217,7 +217,7 @@ int sample_main( int argc, const char** argv )
   //
   // Load model file
   //
-  std::cerr << "Load mesh ...              "; std::cerr.flush();
+  std::cerr << "Load meshes ...              "; std::cerr.flush();
 
   timer.start();
   std::vector<tinyobj::mesh_t> meshes;
@@ -233,6 +233,15 @@ int sample_main( int argc, const char** argv )
   }
 
   printTimeElapsed( timer ); 
+
+  std::cerr << "Mesh statistics:" << std::endl;
+  for (size_t i = 0; i < config.obj_filenames.size(); ++i) {
+    const tinyobj::mesh_t& mesh = meshes[i];
+    std::cerr << config.obj_filenames[i] << ": " << std::endl << "\t"
+              << mesh.positions.size() << " vertices, "
+              << mesh.normals.size() << " normals, " 
+              << mesh.indices.size()/3 << " triangles" << std::endl;
+  }
   
   std::cerr << "Minimum samples per face: " << config.min_samples_per_face << std::endl;
 
