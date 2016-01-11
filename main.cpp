@@ -40,7 +40,7 @@ const size_t SAMPLES_PER_FACE = 3;
 
 // For parsing command line into constants
 struct Config {
-  std::string obj_filename;
+  std::vector<std::string> obj_filenames;
   size_t num_instances_per_mesh;
   int num_samples;
   int min_samples_per_face;
@@ -50,11 +50,6 @@ struct Config {
 
   Config( int argc, const char ** argv ) {
     // set defaults
-#ifdef PROJECT_ABSDIRECTORY
-    obj_filename = std::string(PROJECT_ABSDIRECTORY) + std::string("/assets/lucy.obj");
-#else
-    obj_filename = std::string( "./assets/lucy.obj" );
-#endif
     num_instances_per_mesh = 1;
     num_samples = 0;  // default means determine from mesh
     min_samples_per_face = SAMPLES_PER_FACE;
@@ -76,7 +71,8 @@ struct Config {
       } 
       else if( (arg == "-o" || arg == "--obj") && i+1 < argc ) 
       {
-        obj_filename = argv[++i];
+        std::string str = argv[++i];
+        obj_filenames.push_back(str);
       } 
       else if ( (arg == "-i" || arg == "--instances") && i+1 < argc )
       {
@@ -127,6 +123,15 @@ struct Config {
         std::cerr << "Bad option: '" << arg << "'" << std::endl;
         printUsageAndExit( argv[0] );
       }
+    }
+
+    if (obj_filenames.empty()) {
+      // default filename
+#ifdef PROJECT_ABSDIRECTORY
+      obj_filenames.push_back(std::string(PROJECT_ABSDIRECTORY) + std::string("/assets/lucy.obj"));
+#else
+      obj_filenames.push_back(std::string( "./assets/lucy.obj" ));
+#endif
     }
   }
 
@@ -215,14 +220,16 @@ int sample_main( int argc, const char** argv )
   std::cerr << "Load mesh ...              "; std::cerr.flush();
 
   timer.start();
-  tinyobj::mesh_t mesh;
-  { 
+  std::vector<tinyobj::mesh_t> meshes;
+  for(size_t i = 0; i < config.obj_filenames.size(); ++i) { 
     std::string errs;
-    bool loaded = tinyobj::LoadObj(mesh, errs, config.obj_filename.c_str());
+    tinyobj::mesh_t mesh;
+    bool loaded = tinyobj::LoadObj(mesh, errs, config.obj_filenames[i].c_str());
     if (!errs.empty() || !loaded) {
       std::cerr << errs << std::endl;
       return 0; 
     }
+    meshes.push_back(mesh);
   }
 
   printTimeElapsed( timer ); 
@@ -232,13 +239,13 @@ int sample_main( int argc, const char** argv )
   //
   // Populate instances
   //
-  const size_t num_user_meshes = 1;
-  const size_t num_instances = num_user_meshes * config.num_instances_per_mesh;
+  const size_t num_instances = meshes.size() * config.num_instances_per_mesh;
   std::vector<bake::Instance> instances;
   instances.reserve(num_instances);
 
-  for (size_t meshIdx = 0; meshIdx < num_user_meshes; ++meshIdx) {
+  for (size_t meshIdx = 0; meshIdx < meshes.size(); ++meshIdx) {
     
+    tinyobj::mesh_t& mesh = meshes[meshIdx];
     bake::Mesh* bake_mesh = new bake::Mesh;
     bake_mesh->num_vertices  = mesh.positions.size();
     bake_mesh->num_normals   = mesh.normals.size(); 
