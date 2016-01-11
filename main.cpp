@@ -101,16 +101,8 @@ struct Config {
           printParseErrorAndExit( argv[0], arg, argv[i] );
         }
       }
-      else if ( (arg == "-l" || arg == "--least_squares " ) && i+1 < argc ) {
-        int flag = 0;
-        if( sscanf( argv[++i], "%d", &flag ) != 1 ) {
-          printParseErrorAndExit( argv[0], arg, argv[i] );
-        }
-        if (flag) {
-          filter_mode = bake::VERTEX_FILTER_LEAST_SQUARES;
-        } else {
-          filter_mode = bake::VERTEX_FILTER_AREA_BASED;  
-        }
+      else if ( (arg == "--no_least_squares" ) ) {
+        filter_mode = bake::VERTEX_FILTER_AREA_BASED;  
       }
       else if ( (arg == "-w" || arg == "--regularization_weight" ) && i+1 < argc ) {
         if( sscanf( argv[++i], "%f", &regularization_weight ) != 1 ) {
@@ -141,13 +133,15 @@ struct Config {
     << "Usage  : " << argv0 << " [options]\n"
     << "App options:\n"
     << "  -h  | --help                          Print this usage message\n"
-    << "  -l  | --least_squares <0|1>           Enable or disable least squares filtering (default 1 if built with Eigen3)\n"
-    << "  -o  | --obj <obj_file>                Specify model to be rendered\n"
+    << "  -o  | --obj <obj_file>                Specify model to be rendered.  Repeat this flag for multiple models.\n"
     << "  -i  | --instances <n>                 Number of instances per mesh (default 1).  For testing.\n"
     << "  -r  | --rays    <n>                   Number of rays per sample point for gather (default " << NUM_RAYS << ")\n"
     << "  -s  | --samples <n>                   Number of sample points on mesh (default " << SAMPLES_PER_FACE << " per face; any extra samples are based on area)\n"
     << "  -t  | --samples_per_face <n>          Minimum number of samples per face (default " << SAMPLES_PER_FACE << ")\n"
+#ifdef EIGEN3_ENABLED
     << "  -w  | --regularization_weight <w>     Regularization weight for least squares, 0-1 range. (default 0.1)\n"
+    << "        --no_least_squares              Disable least squares filtering\n"
+#endif
     << std::endl;
     
     exit(1);
