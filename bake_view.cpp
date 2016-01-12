@@ -168,22 +168,12 @@ public:
 
 namespace bake {
 
-  void view( const bake::Instance* instances, const size_t num_instances, float const* const* vertex_colors )
+  void view( const bake::Instance* instances, const size_t num_instances, float const* const* vertex_colors,
+             float scene_bbox_min[3], float scene_bbox_max[3])
   {
 
-    // bbox for all instances
-    vec3f bbox_min(FLT_MAX, FLT_MAX, FLT_MAX);
-    vec3f bbox_max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-    for (size_t i = 0; i < num_instances; ++i) {
-      mat4f object2world(instances[i].xform);
-      object2world = transpose(object2world);  // optix matrixes are transposed from opengl
-      vec3f instance_bbox_min = object2world*vec3f(instances[i].mesh->bbox_min);
-      vec3f instance_bbox_max = object2world*vec3f(instances[i].mesh->bbox_max);
-      for(size_t k = 0; k < 3; ++k) {
-        bbox_min[k] = std::min(bbox_min[k], instance_bbox_min[k]);
-        bbox_max[k] = std::max(bbox_max[k], instance_bbox_max[k]);
-      }
-    }
+    vec3f bbox_min(scene_bbox_min);
+    vec3f bbox_max(scene_bbox_max);
     const vec3f center = 0.5f*(bbox_min + bbox_max);
     const vec3f bbox_extents = bbox_max - bbox_min;
     const float max_extent = std::max( std::max(bbox_extents[0], bbox_extents[1]), bbox_extents[2]);

@@ -164,37 +164,6 @@ struct Config {
 
 namespace {
 
-  void make_debug_instances(bake::Mesh* bake_mesh, size_t n, std::vector<bake::Instance>& instances)
-  {
-
-    // Make up a transform per instance
-    const float3 bbox_base = optix::make_float3(0.5f*(bake_mesh->bbox_min[0] + bake_mesh->bbox_max[0]),
-                                                      bake_mesh->bbox_min[1],
-                                                0.5f*(bake_mesh->bbox_min[2] + bake_mesh->bbox_max[2]));
-    const float rot = M_PI/6.0f;
-    const float3 rot_axis = optix::make_float3(0.0f, 1.0f, 0.0f);
-    const float scale_factor = 0.9f;
-    float scale = scale_factor;
-    const float3 base_translation = 1.01*optix::make_float3(bake_mesh->bbox_max[0] - bake_mesh->bbox_min[0], 0.0f, 0.0f);
-    float3 translation = scale_factor* base_translation;
-
-    for (size_t i = 0; i < n; i++) {
-      bake::Instance instance;
-      instance.mesh = bake_mesh;
-      const optix::Matrix4x4 mat = optix::Matrix4x4::translate(translation) *
-                                   optix::Matrix4x4::translate(bbox_base) *
-                                   optix::Matrix4x4::rotate((i+1)*rot, rot_axis) *
-                                   optix::Matrix4x4::scale(optix::make_float3(scale)) *
-                                   optix::Matrix4x4::translate(-bbox_base);
-      scale *= scale_factor;
-      translation += scale*base_translation;
-
-      const float* matdata = mat.getData();
-      std::copy(matdata, matdata+16, instance.xform);
-      instances.push_back(instance);
-    }
-  }
-
   void xform_bbox(const optix::Matrix4x4& mat, const float in_min[3], const float in_max[3],
                   float out_min[3], float out_max[3])
   {
@@ -259,6 +228,42 @@ namespace {
     }
 
     return instance;
+  }
+
+  void make_debug_instances(bake::Mesh* bake_mesh, size_t n, std::vector<bake::Instance>& instances,
+                            float scene_bbox_min[3], float scene_bbox_max[3])
+  {
+
+    // Make up a transform per instance
+    const float3 bbox_base = optix::make_float3(0.5f*(bake_mesh->bbox_min[0] + bake_mesh->bbox_max[0]),
+                                                      bake_mesh->bbox_min[1],
+                                                0.5f*(bake_mesh->bbox_min[2] + bake_mesh->bbox_max[2]));
+    const float rot = M_PI/6.0f;
+    const float3 rot_axis = optix::make_float3(0.0f, 1.0f, 0.0f);
+    const float scale_factor = 0.9f;
+    float scale = scale_factor;
+    const float3 base_translation = 1.01*optix::make_float3(bake_mesh->bbox_max[0] - bake_mesh->bbox_min[0], 0.0f, 0.0f);
+    float3 translation = scale_factor* base_translation;
+
+    for (size_t i = 0; i < n; i++) {
+      bake::Instance instance;
+      instance.mesh = bake_mesh;
+      const optix::Matrix4x4 mat = optix::Matrix4x4::translate(translation) *
+                                   optix::Matrix4x4::translate(bbox_base) *
+                                   optix::Matrix4x4::rotate((i+1)*rot, rot_axis) *
+                                   optix::Matrix4x4::scale(optix::make_float3(scale)) *
+                                   optix::Matrix4x4::translate(-bbox_base);
+      scale *= scale_factor;
+      translation += scale*base_translation;
+
+      xform_bbox(mat, bake_mesh->bbox_min, bake_mesh->bbox_max, instance.bbox_min, instance.bbox_max);
+      expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_min);
+      expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_max);
+
+      const float* matdata = mat.getData();
+      std::copy(matdata, matdata+16, instance.xform);
+      instances.push_back(instance);
+    }
   }
 
 }
@@ -354,7 +359,9 @@ int sample_main( int argc, const char** argv )
 
     instances.push_back(instance);
 
-    if (config.num_instances_per_mesh > 1) make_debug_instances(bake_mesh, config.num_instances_per_mesh-1, instances);
+    if (config.num_instances_per_mesh > 1) {
+      make_debug_instances(bake_mesh, config.num_instances_per_mesh-1, instances, scene_bbox_min, scene_bbox_max);
+    }
     
   }
 
@@ -365,7 +372,7 @@ int sample_main( int argc, const char** argv )
   // Generate AO samples
   //
 
-  std::cerr << "Generate sample points ... "; std::cerr.flush();
+  std::cerr << "Generate sample points ... \n"; std::cerr.flush();
 
   timer.reset();
   timer.start();
@@ -414,7 +421,7 @@ int sample_main( int argc, const char** argv )
   // Visualize results
   //
   std::cerr << "Launch viewer  ... \n" << std::endl;
-  bake::view( &instances[0], instances.size(), vertex_ao );
+  bake::view( &instances[0], instances.size(), vertex_ao, scene_bbox_min, scene_bbox_max );
   
   return 1;
 }

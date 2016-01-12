@@ -31,6 +31,8 @@ namespace bake
   void view(
     const bake::Instance* instances,
     const size_t num_instances,
-    float const* const* vertex_colors );
+    float const* const* vertex_colors,
+    float scene_bbox_min[3], 
+    float scene_bbox_max[3] );
 
 }
