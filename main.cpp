@@ -198,8 +198,8 @@ namespace {
   void xform_bbox(const optix::Matrix4x4& mat, const float in_min[3], const float in_max[3],
                   float out_min[3], float out_max[3])
   {
-    optix::float4 a = mat*optix::make_float4( in_min[0], in_min[1], in_min[2], 1.0f);
-    optix::float4 b = mat*optix::make_float4( in_max[0], in_max[1], in_max[2], 1.0f);
+    float4 a = mat*optix::make_float4( in_min[0], in_min[1], in_min[2], 1.0f);
+    float4 b = mat*optix::make_float4( in_max[0], in_max[1], in_max[2], 1.0f);
     for (size_t k = 0; k < 3; ++k) {
       out_min[k] = (&a.x)[k];
       out_max[k] = (&b.x)[k];
@@ -337,10 +337,7 @@ int sample_main( int argc, const char** argv )
     std::fill(bake_mesh->bbox_min, bake_mesh->bbox_min+3, FLT_MAX);
     std::fill(bake_mesh->bbox_max, bake_mesh->bbox_max+3, -FLT_MAX);
     for (size_t i = 0; i < mesh.positions.size()/3; ++i) {
-      for (size_t k = 0; k < 3; ++k) {
-        bake_mesh->bbox_min[k] = std::min(bake_mesh->bbox_min[k], mesh.positions[3*i+k]);
-        bake_mesh->bbox_max[k] = std::max(bake_mesh->bbox_max[k], mesh.positions[3*i+k]);
-      }
+      expand_bbox(bake_mesh->bbox_min, bake_mesh->bbox_max, &mesh.positions[3*i]);
     }
 
     // Make instance
@@ -352,10 +349,8 @@ int sample_main( int argc, const char** argv )
     std::copy(matdata, matdata+16, instance.xform);
     
     xform_bbox(mat, bake_mesh->bbox_min, bake_mesh->bbox_max, instance.bbox_min, instance.bbox_max);
-    for (size_t k = 0; k < 3; ++k) {
-      scene_bbox_min[k] = std::min(scene_bbox_min[k], instance.bbox_min[k]);
-      scene_bbox_max[k] = std::max(scene_bbox_max[k], instance.bbox_max[k]);
-    }
+    expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_min);
+    expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_max);
 
     instances.push_back(instance);
 
