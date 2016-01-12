@@ -30,7 +30,7 @@ namespace bake
 
 struct AOSamples;
 
-void generateRaysDevice(int seed, int px, int py, int sqrt_passes, float scene_scale, const bake::AOSamples& ao_samples, Ray* rays );
+void generateRaysDevice(unsigned int seed, int px, int py, int sqrt_passes, float scene_scale, const bake::AOSamples& ao_samples, Ray* rays );
 void updateAODevice( int num_samples, const float* hits, float* ao );
 
 }

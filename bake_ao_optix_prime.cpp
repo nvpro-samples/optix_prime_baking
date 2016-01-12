@@ -145,7 +145,7 @@ void bake::ao_optix_prime(
                                                  bbox_max.y - bbox_min.y),
                                                  bbox_max.z - bbox_min.z );
 
-    const int seed = idx;
+    const unsigned int seed = idx;
     for( int i = 0; i < sqrt_rays_per_sample; ++i )
     for( int j = 0; j < sqrt_rays_per_sample; ++j )
     {
@@ -157,8 +157,9 @@ void bake::ao_optix_prime(
     // copy ao to ao_values
     copyao_timer.start();
     cudaMemcpy( ao_values[idx], ao.ptr(), ao.sizeInBytes(), cudaMemcpyDeviceToHost ); 
-    for( size_t  i = 0; i < ao.count(); ++i )
+    for( size_t  i = 0; i < ao.count(); ++i ) {
       ao_values[idx][i] = 1.0f - ao_values[idx][i] / rays_per_sample; 
+    }
     copyao_timer.stop();
 
   }

@@ -86,6 +86,7 @@ size_t distributeSamples(
 
 void sampleInstance(
     const Instance& instance,
+    const unsigned int seed,
     const size_t    min_samples_per_triangle,
     AOSamples&      ao_samples
     );

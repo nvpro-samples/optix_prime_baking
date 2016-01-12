@@ -67,6 +67,7 @@ void sample_triangle(const optix::Matrix4x4& xform, const optix::Matrix4x4& xfor
                      const int3* tri_vertex_indices, const float3* verts,
                      const int3* tri_normal_indices, const float3* normals,
                      const size_t tri_idx, const size_t tri_sample_count, const double tri_area,
+                     const unsigned base_seed,
                      float3* sample_positions, float3* sample_norms, float3* sample_face_norms, bake::SampleInfo* sample_infos)
 {
   const int3&   tri = tri_vertex_indices[tri_idx];
@@ -89,7 +90,7 @@ void sample_triangle(const optix::Matrix4x4& xform, const optix::Matrix4x4& xfor
   }
 
   // Random offset per triangle, to shift Halton points
-  unsigned seed = tea<4>( (unsigned)tri_idx, (unsigned)tri_idx );
+  unsigned seed = tea<4>( base_seed, (unsigned)tri_idx );
   const float2 offset = make_float2( rnd(seed), rnd(seed) );
 
   for ( size_t index = 0; index < tri_sample_count; ++index )
@@ -154,6 +155,7 @@ private:
 
 void bake::sample_instance(
     const bake::Instance& instance,
+    const unsigned int seed,
     const size_t min_samples_per_triangle,
     bake::AOSamples&  ao_samples
     )
@@ -200,6 +202,7 @@ void bake::sample_instance(
     sample_triangle(xform, xform_invtrans,
       tri_vertex_indices, verts, tri_normal_indices, normals, 
       tri_idx, tri_sample_counts[tri_idx], tri_areas[tri_idx],
+      seed,
       sample_positions+sample_idx, sample_norms+sample_idx, sample_face_norms+sample_idx, sample_infos+sample_idx);
     sample_idx += tri_sample_counts[tri_idx];
   }
