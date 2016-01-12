@@ -131,7 +131,7 @@ double triangle_area(const float3& v0, const float3& v1, const float3& v2)
 
 
 
-void sample_instance(
+void bake::sample_instance(
     const bake::Instance& instance,
     const size_t min_samples_per_triangle,
     bake::AOSamples&  ao_samples
@@ -225,13 +225,12 @@ void sample_instance(
 
 }
 
-// entry point
-size_t bake::sample_surfaces_random(
+size_t bake::distribute_samples(
     const bake::Instance* instances,
     const size_t num_instances,
     const size_t min_samples_per_triangle,
     const size_t requested_num_samples,
-    bake::AOSamples*  ao_samples
+    unsigned int* num_samples_per_instance
     )
 {
 
@@ -240,8 +239,8 @@ size_t bake::sample_surfaces_random(
   size_t num_triangles = 0;
   size_t sample_count = 0;  // For entire scene
   for (size_t i = 0; i < num_instances; ++i) {
-    ao_samples[i].num_samples = min_samples_per_triangle * instances[i].mesh->num_triangles; 
-    sample_count += ao_samples[i].num_samples;
+    num_samples_per_instance[i] = min_samples_per_triangle * instances[i].mesh->num_triangles; 
+    sample_count += num_samples_per_instance[i];
     num_triangles += instances[i].mesh->num_triangles;
   }
   const size_t num_samples = std::max(min_samples_per_triangle*num_triangles, requested_num_samples);
@@ -270,30 +269,20 @@ size_t bake::sample_surfaces_random(
     const size_t num_area_based_samples = num_samples - sample_count;
     for (size_t idx = 0; idx < num_instances && sample_count < num_samples; ++idx) {
       const size_t n = std::min(num_samples - sample_count, static_cast<size_t>(num_area_based_samples * instance_areas[idx] / total_area));
-      ao_samples[idx].num_samples += n;
+      num_samples_per_instance[idx] += n;
       sample_count += n;
     }
 
     // There could be a few samples left over. Place one sample per instance until target sample count is reached.
     assert( num_samples - sample_count <= num_instances );
     for (size_t idx = 0; idx < num_instances && sample_count < num_samples; ++idx) {
-      ao_samples[idx].num_samples += 1;
+      num_samples_per_instance[idx] += 1;
       sample_count += 1;
     }
 
   }
 
   assert(sample_count == num_samples);
-  for (size_t idx = 0; idx < num_instances; ++idx) {
-    const size_t n = ao_samples[idx].num_samples;
-    ao_samples[idx].sample_positions    = new float[n*3];
-    ao_samples[idx].sample_normals      = new float[n*3];
-    ao_samples[idx].sample_face_normals = new float[n*3];
-    ao_samples[idx].sample_infos        = new bake::SampleInfo[n*3];
-    sample_instance(instances[idx], min_samples_per_triangle, ao_samples[idx]);
-
-    std::cerr << "sampled instance " << idx << ": " << n << std::endl;
-  }
 
   return num_samples;
 

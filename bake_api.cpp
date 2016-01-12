@@ -61,16 +61,28 @@ void bake::computeAOWithBlockers(
 }
 
 
-size_t bake::sampleSurfaces(
+size_t bake::distributeSamples(
     const Instance* instances,
     const size_t num_instances,
     const size_t min_samples_per_triangle,
     const size_t requested_num_samples,
-    AOSamples*  ao_samples
+    unsigned int*  num_samples_per_instance
     )
 {
 
-  return bake::sample_surfaces_random( instances, num_instances, min_samples_per_triangle, requested_num_samples, ao_samples );
+  return bake::distribute_samples( instances, num_instances, min_samples_per_triangle, requested_num_samples, num_samples_per_instance );
+
+}
+
+
+void bake::sampleInstance(
+    const Instance& instance,
+    const size_t    min_samples_per_triangle,
+    AOSamples&      ao_samples
+    )
+{
+
+  bake::sample_instance( instance, min_samples_per_triangle, ao_samples );
 
 }
 

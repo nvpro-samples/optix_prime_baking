@@ -268,6 +268,26 @@ namespace {
     }
   }
 
+  void allocate_ao_samples(bake::AOSamples& ao_samples, unsigned int n) {
+    ao_samples.num_samples = n;
+    ao_samples.sample_positions = new float[3*n];
+    ao_samples.sample_normals = new float[3*n];
+    ao_samples.sample_face_normals = new float[3*n];
+    ao_samples.sample_infos = new bake::SampleInfo[n];
+  }
+
+  void destroy_ao_samples(bake::AOSamples& ao_samples) {
+    delete [] ao_samples.sample_positions;
+    ao_samples.sample_positions = NULL;
+    delete [] ao_samples.sample_normals;
+    ao_samples.sample_normals = NULL;
+    delete [] ao_samples.sample_face_normals;
+    ao_samples.sample_face_normals = NULL;
+    delete [] ao_samples.sample_infos;
+    ao_samples.sample_infos = NULL;
+    ao_samples.num_samples = 0;
+  }
+
 }
 
 
@@ -379,8 +399,15 @@ int sample_main( int argc, const char** argv )
   timer.reset();
   timer.start();
 
+  std::vector<unsigned int> num_samples_per_instance(num_instances);
+  const size_t total_samples = bake::distributeSamples( &instances[0], instances.size(), config.min_samples_per_face, config.num_samples,
+    &num_samples_per_instance[0]);
+
   std::vector<bake::AOSamples> ao_samples(num_instances);
-  const size_t total_samples = bake::sampleSurfaces( &instances[0], instances.size(), config.min_samples_per_face, config.num_samples, &ao_samples[0]);
+  for (size_t i = 0; i < num_instances; ++i) {
+    allocate_ao_samples( ao_samples[i], num_samples_per_instance[i] );
+    bake::sampleInstance( instances[i], config.min_samples_per_face, ao_samples[i] );
+  }
   
   printTimeElapsed( timer ); 
 
@@ -439,10 +466,8 @@ int sample_main( int argc, const char** argv )
     delete [] ao_values[i];
     delete [] vertex_ao[i];
 
-    delete [] ao_samples[i].sample_positions;
-    delete [] ao_samples[i].sample_normals;
-    delete [] ao_samples[i].sample_face_normals;
-    delete [] ao_samples[i].sample_infos;
+    destroy_ao_samples(ao_samples[i]);
+
   }
   delete [] ao_values;
   delete [] vertex_ao;
