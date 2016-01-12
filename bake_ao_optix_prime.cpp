@@ -118,6 +118,7 @@ void bake::ao_optix_prime(
   Query   query = scene->createQuery( RTP_QUERY_TYPE_ANY );
 
   const int sqrt_rays_per_sample = static_cast<int>( sqrtf( static_cast<float>( rays_per_sample ) ) + .5f );
+  setup_timer.stop();
 
   Timer raygen_timer;
   Timer query_timer;
@@ -127,12 +128,13 @@ void bake::ao_optix_prime(
   for (size_t idx = 0; idx < num_instances; ++idx) {
 
     // Split sample points into batches
-    const size_t batch_size = 2000000;  // Note: fits in GTX 750
+    const size_t batch_size = 2000000;  // Note: fits on GTX 750 along with Hunter model
     const bake::AOSamples& ao_samples = ao_samples_per_instance[idx];
     const size_t num_batches = std::max(idivCeil(ao_samples.num_samples, batch_size), size_t(1));
 
     for (size_t batch_idx = 0; batch_idx < num_batches; batch_idx++) {
 
+      setup_timer.start();
       const size_t sample_offset = batch_idx*batch_size;
       const size_t num_samples = std::min(batch_size, ao_samples.num_samples - sample_offset);
 
@@ -158,7 +160,6 @@ void bake::ao_optix_prime(
       
       query->setRays( rays.count(), Ray::format,             rays.type(), rays.ptr() );
       query->setHits( hits.count(), RTP_BUFFER_FORMAT_HIT_T, hits.type(), hits.ptr() );
-      setup_timer.stop();
 
       const optix::Matrix4x4 xform(instances[idx].xform);
       const float* bmin = instances[idx].mesh->bbox_min;
@@ -168,6 +169,7 @@ void bake::ao_optix_prime(
       const float scene_scale = std::max( std::max(bbox_max.x - bbox_min.x,
                                                    bbox_max.y - bbox_min.y),
                                                    bbox_max.z - bbox_min.z );
+      setup_timer.stop();
 
       const unsigned int seed = idx;
       for( int i = 0; i < sqrt_rays_per_sample; ++i )
