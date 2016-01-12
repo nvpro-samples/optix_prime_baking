@@ -33,6 +33,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <set>
 
 const size_t NUM_RAYS = 64;
 const size_t SAMPLES_PER_FACE = 3;
@@ -183,12 +184,14 @@ namespace {
     }
   }
 
-  bake::Instance make_ground_plane(float scene_bbox_min[3], float scene_bbox_max[3])
+  bake::Instance make_ground_plane(float scene_bbox_min[3], float scene_bbox_max[3], 
+                                   std::vector<float>& plane_vertices, std::vector<unsigned int>& plane_indices,
+                                   bake::Mesh* plane_mesh)
   {
 
     const unsigned int index_data[] = {0, 1, 2, 0, 2, 3};
-    unsigned int* plane_indices = new unsigned int[6];
-    std::copy(index_data, index_data+6, plane_indices);
+    plane_indices.resize(6);
+    std::copy(index_data, index_data+6, plane_indices.begin());
     float scene_extents[] = {scene_bbox_max[0] - scene_bbox_min[0],
                              scene_bbox_max[1] - scene_bbox_min[1],
                              scene_bbox_max[2] - scene_bbox_min[2]};
@@ -203,20 +206,19 @@ namespace {
                                  ground_max[0], ground_min[1], ground_min[2],
                                  ground_max[0], ground_min[1], ground_max[2],
                                  ground_min[0], ground_min[1], ground_max[2]};
-    float* plane_vertices = new float[12];
-    std::copy(vertex_data, vertex_data+12, plane_vertices);
+    plane_vertices.resize(12);
+    std::copy(vertex_data, vertex_data+12, plane_vertices.begin());
 
-    bake::Mesh* plane_mesh = new bake::Mesh;
     plane_mesh->num_vertices  = 4;
     plane_mesh->num_normals   = 0;
     plane_mesh->num_triangles = 2;
-    plane_mesh->vertices      = plane_vertices;
+    plane_mesh->vertices      = &plane_vertices[0];
     plane_mesh->normals       = NULL;
-    plane_mesh->tri_vertex_indices = plane_indices;
+    plane_mesh->tri_vertex_indices = &plane_indices[0];
     plane_mesh->tri_normal_indices = NULL;
     
     bake::Instance instance;
-    instance.mesh = plane_mesh;  // leak
+    instance.mesh = plane_mesh;
 
     const optix::Matrix4x4 mat = optix::Matrix4x4::identity();
     const float* matdata = mat.getData();
@@ -348,7 +350,7 @@ int sample_main( int argc, const char** argv )
     // Make instance
 
     bake::Instance instance;
-    instance.mesh = bake_mesh;  //leak
+    instance.mesh = bake_mesh;  // take ownership
     const optix::Matrix4x4 mat = optix::Matrix4x4::identity();  // TODO: use transform from file
     const float* matdata = mat.getData();
     std::copy(matdata, matdata+16, instance.xform);
@@ -399,7 +401,10 @@ int sample_main( int argc, const char** argv )
   if (config.use_ground_plane_blocker) {
     // Add blocker for ground plane (no surface samples)
     std::vector<bake::Instance> blockers;
-    blockers.push_back(make_ground_plane(scene_bbox_min, scene_bbox_max));
+    std::vector<float> plane_vertices;
+    std::vector<unsigned int> plane_indices;
+    bake::Mesh plane_mesh;
+    blockers.push_back(make_ground_plane(scene_bbox_min, scene_bbox_max, plane_vertices, plane_indices, &plane_mesh));
     bake::computeAOWithBlockers( &instances[0], num_instances, &blockers[0], blockers.size(), &ao_samples[0], config.num_rays, ao_values );
   } else {
     bake::computeAO( &instances[0], num_instances, &ao_samples[0], config.num_rays, ao_values );
@@ -422,6 +427,25 @@ int sample_main( int argc, const char** argv )
   //
   std::cerr << "Launch viewer  ... \n" << std::endl;
   bake::view( &instances[0], instances.size(), vertex_ao, scene_bbox_min, scene_bbox_max );
+
+  // Clean up instances, being careful not to double delete
+  std::set<bake::Mesh*> freed_meshes;
+  for (size_t i = 0; i < instances.size(); ++i) {
+    if (freed_meshes.find(instances[i].mesh) == freed_meshes.end()) {
+      freed_meshes.insert(instances[i].mesh);
+      delete instances[i].mesh; 
+      instances[i].mesh = NULL;
+    }
+    delete [] ao_values[i];
+    delete [] vertex_ao[i];
+
+    delete [] ao_samples[i].sample_positions;
+    delete [] ao_samples[i].sample_normals;
+    delete [] ao_samples[i].sample_face_normals;
+    delete [] ao_samples[i].sample_infos;
+  }
+  delete [] ao_values;
+  delete [] vertex_ao;
   
   return 1;
 }
