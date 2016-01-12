@@ -47,11 +47,9 @@ do {                              \
 namespace
 {
 
-Model createInstances( Context& context, const bake::Instance* instances, const size_t num_instances, std::vector<Model>& models )
+void createInstances( Context& context, const bake::Instance* instances, const size_t num_instances, 
+    std::vector<Model>& models, std::vector<RTPmodel>& prime_instances, std::vector<optix::Matrix4x4>& transforms )
 {
-  std::vector<RTPmodel> prime_instances(num_instances);
-  std::vector<optix::Matrix4x4> transforms(num_instances);
-  Model scene = context->createModel();
 
   for (int i = 0; i < num_instances; ++i) {
     Model model = context->createModel();
@@ -62,15 +60,11 @@ Model createInstances( Context& context, const bake::Instance* instances, const 
         );
     model->update( 0 );
 
-    prime_instances[i] = model->getRTPmodel();
-    transforms[i] = optix::Matrix4x4(instances[i].xform);
     models.push_back(model);  // Model is ref counted, so need to return it to prevent destruction
+    prime_instances.push_back(model->getRTPmodel());
+    transforms.push_back(optix::Matrix4x4(instances[i].xform));
   }
 
-  scene->setInstances(num_instances, RTP_BUFFER_TYPE_HOST, &prime_instances[0],
-                      RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );
-  scene->update( 0 );
-  return scene;
 }
 
 
@@ -80,6 +74,8 @@ Model createInstances( Context& context, const bake::Instance* instances, const 
 void bake::ao_optix_prime(
     const bake::Instance* instances,
     const size_t num_instances,
+    const bake::Instance* blockers,
+    const size_t num_blockers,
     const bake::AOSamples* ao_samples_per_instance,
     const int rays_per_sample,
     float** ao_values
@@ -90,8 +86,19 @@ void bake::ao_optix_prime(
   setup_timer.start( );
 
   Context ctx = Context::create( RTP_CONTEXT_TYPE_CUDA );
+
   std::vector<Model> models;
-  Model   scene = createInstances( ctx, instances, num_instances, models );
+  std::vector<RTPmodel> prime_instances;
+  std::vector<optix::Matrix4x4> transforms;
+  createInstances( ctx, instances, num_instances, models, prime_instances, transforms );
+  if (num_blockers > 0) {
+    createInstances( ctx, blockers, num_blockers, models, prime_instances, transforms ); 
+  }
+  Model scene = ctx->createModel();
+  scene->setInstances( prime_instances.size(), RTP_BUFFER_TYPE_HOST, &prime_instances[0],
+                      RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );
+  scene->update( 0 );
+
   Query   query = scene->createQuery( RTP_QUERY_TYPE_ANY );
 
   const int sqrt_rays_per_sample = static_cast<int>( sqrtf( static_cast<float>( rays_per_sample ) ) + .5f );

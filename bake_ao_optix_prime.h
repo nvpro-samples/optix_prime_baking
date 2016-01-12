@@ -28,6 +28,8 @@ namespace bake
 void ao_optix_prime(
     const Instance* instances,
     const size_t    num_instances,
+    const Instance* blockers,
+    const size_t    num_blockers,
     const AOSamples* ao_samples,
     const int rays_per_sample,
     float** ao_values

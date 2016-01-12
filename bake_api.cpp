@@ -41,7 +41,22 @@ void bake::computeAO(
     )
 {
 
-  bake::ao_optix_prime( instances, num_instances, ao_samples, rays_per_sample, ao_values );
+  bake::ao_optix_prime( instances, num_instances, /*blockers*/ NULL, /*num_blockers*/ 0, ao_samples, rays_per_sample, ao_values );
+
+}
+
+void bake::computeAOWithBlockers(
+    const Instance*   instances,
+    const size_t      num_instances,
+    const Instance*   blockers,
+    const size_t      num_blockers,
+    const AOSamples*  ao_samples,
+    int               rays_per_sample,
+    float**           ao_values 
+    )
+{
+
+  bake::ao_optix_prime( instances, num_instances, blockers, num_blockers, ao_samples, rays_per_sample, ao_values );
 
 }
 

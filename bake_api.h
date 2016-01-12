@@ -54,6 +54,8 @@ struct Instance
 {
   float xform[16];  // 4x4 row major
   Mesh *mesh;
+  float bbox_min[3];
+  float bbox_max[3];
 };
 
 
@@ -86,6 +88,19 @@ size_t sampleSurfaces(
 void computeAO( 
     const Instance*  instances,
     const size_t     num_instances,
+    const AOSamples* ao_samples,
+    int              rays_per_sample,
+    float**          ao_values 
+    );
+
+
+// This version takes extra "blocker" objects that occlude rays,
+// but do not have any AO samples of their own.
+void computeAOWithBlockers(
+    const Instance*  instances,
+    const size_t     num_instances,
+    const Instance*  blockers,
+    const size_t     num_blockers,
     const AOSamples* ao_samples,
     int              rays_per_sample,
     float**          ao_values 
