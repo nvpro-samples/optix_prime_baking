@@ -43,6 +43,7 @@ inline int idivCeil( int x, int y )
 //------------------------------------------------------------------------------
 __global__
 void generateRaysKernel( 
+    const int base_seed,
     const int px,
     const int py,
     const int sqrt_passes,
@@ -58,7 +59,8 @@ void generateRaysKernel(
   if( idx >= num_samples )                                                             
     return;
 
-  unsigned seed = tea<2>( px*sqrt_passes+py, idx );
+  const int tea_seed = (base_seed << 16) | (px*sqrt_passes+py);
+  unsigned seed = tea<2>( tea_seed, idx );
 
   const float3 sample_norm      = sample_normals[idx]; 
   const float3 sample_face_norm = sample_face_normals[idx];
@@ -87,12 +89,13 @@ void generateRaysKernel(
 }
 
 __host__
-void bake::generateRaysDevice( int px, int py, int sqrt_passes, float scene_scale, const bake::AOSamples& ao_samples, Ray* rays )
+void bake::generateRaysDevice(int seed, int px, int py, int sqrt_passes, float scene_scale, const bake::AOSamples& ao_samples, Ray* rays )
 {
   const int block_size  = 512;                                                           
   const int block_count = idivCeil( (int)ao_samples.num_samples, block_size );                              
 
   generateRaysKernel<<<block_count,block_size>>>( 
+      seed,
       px,
       py,
       sqrt_passes,

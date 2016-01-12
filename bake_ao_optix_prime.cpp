@@ -145,11 +145,11 @@ void bake::ao_optix_prime(
                                                  bbox_max.y - bbox_min.y),
                                                  bbox_max.z - bbox_min.z );
 
+    const int seed = idx;
     for( int i = 0; i < sqrt_rays_per_sample; ++i )
     for( int j = 0; j < sqrt_rays_per_sample; ++j )
     {
-      // TODO: vary rays per mesh
-      ACCUM_TIME( raygen_timer,   generateRaysDevice( i, j, sqrt_rays_per_sample, scene_scale, ao_samples_device, rays.ptr() ) );
+      ACCUM_TIME( raygen_timer,   generateRaysDevice(seed, i, j, sqrt_rays_per_sample, scene_scale, ao_samples_device, rays.ptr() ) );
       ACCUM_TIME( query_timer,    query->execute( 0 ) );
       ACCUM_TIME( updateao_timer, updateAODevice( (int)ao_samples.num_samples, hits.ptr(), ao.ptr() ) );
     }
