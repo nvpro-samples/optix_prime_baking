@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cassert>
 
-// Distrubutes samples per element (instance, triangle, ...), satisfying two constraints:
+// Distributes samples per element (instance, triangle, ...), satisfying two constraints:
 //  * total samples add up to num_samples
 //  * minimum number of samples per element
 // Any extra samples are placed according to area ratios.
