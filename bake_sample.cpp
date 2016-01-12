@@ -23,6 +23,7 @@
 
 #include "bake_api.h"
 #include "bake_sample.h"
+#include "bake_sample_internal.h"  // templates
 #include <optixu/optixu_math_namespace.h>
 #include <optixu/optixu_matrix_namespace.h>
 #include "random.h"
@@ -225,6 +226,28 @@ void bake::sample_instance(
 
 }
 
+class InstanceSampler
+{
+public:
+  InstanceSampler(const unsigned int* minSamplesPerInstance,
+                  const double* areaPerInstance)
+  : m_minSamplesPerInstance(minSamplesPerInstance), 
+    m_areaPerInstance(areaPerInstance)
+    {}
+          
+  unsigned int minSamples(size_t i) const {
+    return m_minSamplesPerInstance[i];
+  }
+  double area(size_t i) const {
+    return m_areaPerInstance[i];
+  }
+
+private:
+  const unsigned int* m_minSamplesPerInstance;
+  const double* m_areaPerInstance;
+};
+
+
 size_t bake::distribute_samples(
     const bake::Instance* instances,
     const size_t num_instances,
@@ -234,25 +257,21 @@ size_t bake::distribute_samples(
     )
 {
 
-  // First place minimum samples per instance
-
+  // Compute min samples per instance
+  std::vector<unsigned int> min_samples_per_instance(num_instances);
   size_t num_triangles = 0;
-  size_t sample_count = 0;  // For entire scene
   for (size_t i = 0; i < num_instances; ++i) {
-    num_samples_per_instance[i] = min_samples_per_triangle * instances[i].mesh->num_triangles; 
-    sample_count += num_samples_per_instance[i];
+    min_samples_per_instance[i] = min_samples_per_triangle * instances[i].mesh->num_triangles; 
     num_triangles += instances[i].mesh->num_triangles;
   }
-  const size_t num_samples = std::max(min_samples_per_triangle*num_triangles, requested_num_samples);
+  const size_t min_num_samples = min_samples_per_triangle*num_triangles;
+  size_t num_samples = std::max(min_num_samples, requested_num_samples);
 
-  if (num_samples > sample_count) {
+  // Compute surface area per instance
+  std::vector<double> area_per_instance(num_instances);
+  std::fill(area_per_instance.begin(), area_per_instance.end(), 0.0);
+  if (num_samples > min_num_samples) {
 
-    // Area-based sampling
-
-    // Compute surface area of each instance
-    double total_area = 0.0;
-    std::vector<double> instance_areas(num_instances);
-    std::fill(instance_areas.begin(), instance_areas.end(), 0.0);
     for (size_t idx = 0; idx < num_instances; ++idx) {
       const bake::Mesh& mesh = *instances[idx].mesh;
       const optix::Matrix4x4 xform(instances[idx].xform);
@@ -261,28 +280,15 @@ size_t bake::distribute_samples(
       for (size_t tri_idx = 0; tri_idx < mesh.num_triangles; ++tri_idx) {
         const int3& tri = tri_vertex_indices[tri_idx];
         double area = triangle_area(xform*verts[tri.x], xform*verts[tri.y], xform*verts[tri.z]);
-        instance_areas[idx] += area;
+        area_per_instance[idx] += area;
       }
-      total_area += instance_areas[idx];
-    }
-
-    const size_t num_area_based_samples = num_samples - sample_count;
-    for (size_t idx = 0; idx < num_instances && sample_count < num_samples; ++idx) {
-      const size_t n = std::min(num_samples - sample_count, static_cast<size_t>(num_area_based_samples * instance_areas[idx] / total_area));
-      num_samples_per_instance[idx] += n;
-      sample_count += n;
-    }
-
-    // There could be a few samples left over. Place one sample per instance until target sample count is reached.
-    assert( num_samples - sample_count <= num_instances );
-    for (size_t idx = 0; idx < num_instances && sample_count < num_samples; ++idx) {
-      num_samples_per_instance[idx] += 1;
-      sample_count += 1;
     }
 
   }
 
-  assert(sample_count == num_samples);
+  // Distribute samples
+  InstanceSampler sampler(&min_samples_per_instance[0], &area_per_instance[0]);
+  distribute_samples_generic(sampler, num_samples, num_instances, num_samples_per_instance);
 
   return num_samples;
 

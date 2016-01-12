@@ -407,6 +407,7 @@ int sample_main( int argc, const char** argv )
   for (size_t i = 0; i < num_instances; ++i) {
     allocate_ao_samples( ao_samples[i], num_samples_per_instance[i] );
     bake::sampleInstance( instances[i], config.min_samples_per_face, ao_samples[i] );
+    std::cerr << "sampled instance " << i << ": " << num_samples_per_instance[i] << std::endl;
   }
   
   printTimeElapsed( timer ); 
