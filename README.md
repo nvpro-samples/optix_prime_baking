@@ -11,7 +11,7 @@ vertices of a mesh for use during final shading with OpenGL.  The steps are as f
   * **Compute ambient occlusion at the sample points**.  We shoot batches of rays using OptiX Prime.  Each batch has a single jittered ray per sample point.
 
   * **Resample occlusion from sample points to vertices**.  If the external [Eigen 3](http://eigen.tuxfamily.org) template library was found during CMake configuration, then we use the 
-  resampling method from "Least Squares Vertex Baking" (Kavan et al, EGSR 2011).  Eigen is open source.  In the absence of Eigen support, we use simpler barycentric resampling.  This shows more visual artifacts, especially when the input mesh has large triangles.
+  resampling method from "Least Squares Vertex Baking" (Kavan et al, EGSR 2011).  Eigen is open source.  In the absence of Eigen support, we use simpler barycentric resampling.  This shows more visual artifacts, especially when the input mesh has large triangles.  A copy of Eigen is included in the "eigen" subdirectory and will be used by default.
 
   * **Visualize occlusion in OpenGL as a vertex attribute**.
 
@@ -49,7 +49,7 @@ check main.cpp.
  
 #### Examples
 
-An example with a decimated Lucy model (80k faces) is shown below.  The right image uses least squares filtering and is noticeably smoother when the triangles are this large.
+An example with a decimated Lucy model (80k faces) is shown below.  The right image uses least squares filtering (regularization weight 0.1) and is noticeably smoother when the triangles are this large.
 ![Lucy Image](https://github.com/nvpro-samples/optix_prime_baking/blob/master/doc/lucy_least_squares_comparison.png)
 
 Mesh detail showing triangle size: 
