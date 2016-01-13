@@ -29,7 +29,10 @@ namespace bake
 {
 
   void view(
-    const bake::Mesh& bake_mesh,
-    const float* vertex_colors );
+    const bake::Instance* instances,
+    const size_t num_instances,
+    float const* const* vertex_colors,
+    float scene_bbox_min[3], 
+    float scene_bbox_max[3] );
 
 }

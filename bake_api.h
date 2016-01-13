@@ -50,6 +50,14 @@ struct Mesh
   float     bbox_max[3];
 };
 
+struct Instance
+{
+  float xform[16];  // 4x4 row major
+  Mesh *mesh;
+  float bbox_min[3];
+  float bbox_max[3];
+};
+
 
 struct AOSamples
 {
@@ -68,18 +76,41 @@ enum VertexFilterMode
 };
 
 
-void sampleSurface(
-    const Mesh& mesh,
-    size_t min_samples_per_triangle,
-    AOSamples&  ao_samples
+size_t distributeSamples(
+    const Instance* instances,
+    const size_t num_instances,
+    const size_t min_samples_per_triangle,
+    const size_t requested_num_samples,
+    unsigned int* num_samples_per_instance // output
+    );
+
+void sampleInstance(
+    const Instance& instance,
+    const unsigned int seed,
+    const size_t    min_samples_per_triangle,
+    AOSamples&      ao_samples
     );
 
 
 void computeAO( 
-    const Mesh&       mesh,
-    const AOSamples&  ao_samples,
-    int               rays_per_sample,
-    float*            ao_values 
+    const Instance*  instances,
+    const size_t     num_instances,
+    const AOSamples* ao_samples,
+    int              rays_per_sample,
+    float**          ao_values 
+    );
+
+
+// This version takes extra "blocker" objects that occlude rays,
+// but do not have any AO samples of their own.
+void computeAOWithBlockers(
+    const Instance*  instances,
+    const size_t     num_instances,
+    const Instance*  blockers,
+    const size_t     num_blockers,
+    const AOSamples* ao_samples,
+    int              rays_per_sample,
+    float**          ao_values 
     );
 
 

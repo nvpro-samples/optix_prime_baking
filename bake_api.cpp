@@ -33,26 +33,57 @@ using namespace optix;
 
 
 void bake::computeAO( 
-    const Mesh&       mesh,
-    const AOSamples&  ao_samples,
+    const Instance*   instances,
+    const size_t      num_instances,
+    const AOSamples*  ao_samples,
     int               rays_per_sample,
-    float*            ao_values 
+    float**           ao_values 
     )
 {
 
-  bake::ao_optix_prime( mesh, ao_samples, rays_per_sample, ao_values );
+  bake::ao_optix_prime( instances, num_instances, /*blockers*/ NULL, /*num_blockers*/ 0, ao_samples, rays_per_sample, ao_values );
+
+}
+
+void bake::computeAOWithBlockers(
+    const Instance*   instances,
+    const size_t      num_instances,
+    const Instance*   blockers,
+    const size_t      num_blockers,
+    const AOSamples*  ao_samples,
+    int               rays_per_sample,
+    float**           ao_values 
+    )
+{
+
+  bake::ao_optix_prime( instances, num_instances, blockers, num_blockers, ao_samples, rays_per_sample, ao_values );
 
 }
 
 
-void bake::sampleSurface(
-    const Mesh& mesh,
+size_t bake::distributeSamples(
+    const Instance* instances,
+    const size_t num_instances,
     const size_t min_samples_per_triangle,
-    AOSamples&  ao_samples
+    const size_t requested_num_samples,
+    unsigned int*  num_samples_per_instance
     )
 {
 
-  bake::sample_surface_random( mesh, min_samples_per_triangle, ao_samples );
+  return bake::distribute_samples( instances, num_instances, min_samples_per_triangle, requested_num_samples, num_samples_per_instance );
+
+}
+
+
+void bake::sampleInstance(
+    const Instance& instance,
+    const unsigned int seed,
+    const size_t    min_samples_per_triangle,
+    AOSamples&      ao_samples
+    )
+{
+
+  bake::sample_instance( instance, seed, min_samples_per_triangle, ao_samples );
 
 }
 

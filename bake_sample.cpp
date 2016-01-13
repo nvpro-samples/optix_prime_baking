@@ -23,7 +23,9 @@
 
 #include "bake_api.h"
 #include "bake_sample.h"
+#include "bake_sample_internal.h"  // templates
 #include <optixu/optixu_math_namespace.h>
+#include <optixu/optixu_matrix_namespace.h>
 #include "random.h"
 
 #include <algorithm>
@@ -52,20 +54,21 @@ float halton(const unsigned int index)
 float3 faceforward( const float3& normal, const float3& geom_normal )
 {
   if ( optix::dot( normal, geom_normal ) > 0.0f ) return normal;
-  static int warned = 0;
-  if (!warned) {
-    std::cerr << "WARNING: Reversing vertex normals to point in same direction as face normals" << std::endl;
-    warned = 1;
-  }
   return -normal;
 }
 
+float3 operator*(const optix::Matrix4x4& mat, const float3& v)
+{
+  return make_float3(mat*make_float4(v, 1.0f)); 
+}
 
-void sample_triangle(const int3* tri_vertex_indices, const float3* verts,
+
+void sample_triangle(const optix::Matrix4x4& xform, const optix::Matrix4x4& xform_invtrans,
+                     const int3* tri_vertex_indices, const float3* verts,
                      const int3* tri_normal_indices, const float3* normals,
-                     size_t tri_idx, size_t tri_sample_begin, size_t tri_sample_end,
-                     float3* sample_positions, float3* sample_norms, float3* sample_face_norms, bake::SampleInfo* sample_infos,
-                     size_t& sample_idx)
+                     const size_t tri_idx, const size_t tri_sample_count, const double tri_area,
+                     const unsigned base_seed,
+                     float3* sample_positions, float3* sample_norms, float3* sample_face_norms, bake::SampleInfo* sample_infos)
 {
   const int3&   tri = tri_vertex_indices[tri_idx];
   const float3& v0 = verts[tri.x];
@@ -87,14 +90,13 @@ void sample_triangle(const int3* tri_vertex_indices, const float3* verts,
   }
 
   // Random offset per triangle, to shift Halton points
-  unsigned seed = tea<4>( (unsigned)tri_idx, (unsigned)tri_idx );
+  unsigned seed = tea<4>( base_seed, (unsigned)tri_idx );
   const float2 offset = make_float2( rnd(seed), rnd(seed) );
 
-  for ( size_t index = tri_sample_begin; index < tri_sample_end; ++index, ++sample_idx )
+  for ( size_t index = 0; index < tri_sample_count; ++index )
   {
-    sample_infos[sample_idx].tri_idx = (unsigned)tri_idx;
-    // Note: dA must be set elsewhere
-    float3& bary = *reinterpret_cast<float3*>(sample_infos[sample_idx].bary);
+    sample_infos[index].tri_idx = (unsigned)tri_idx;
+    sample_infos[index].dA = static_cast<float>(tri_area / tri_sample_count);
 
     // Random point in unit square
     float r1 = offset.x + halton<2>((unsigned)index+1);
@@ -105,14 +107,15 @@ void sample_triangle(const int3* tri_vertex_indices, const float3* verts,
     assert(r2 >= 0 && r2 <= 1);
 
     // Map to triangle. Ref: PBRT 2nd edition, section 13.6.4
+    float3& bary = *reinterpret_cast<float3*>(sample_infos[index].bary);
     const float sqrt_r1 = sqrt(r1);
     bary.x = 1.0f - sqrt_r1;
     bary.y = r2*sqrt_r1;
     bary.z = 1.0f - bary.x - bary.y;
 
-    sample_positions[sample_idx] = bary.x*v0 + bary.y*v1 + bary.z*v2;
-    sample_norms[sample_idx] = optix::normalize( bary.x*n0 + bary.y*n1 + bary.z*n2 );
-    sample_face_norms[sample_idx] = face_normal;
+    sample_positions[index] = xform*(bary.x*v0 + bary.y*v1 + bary.z*v2);
+    sample_norms[index] = optix::normalize(xform_invtrans*( bary.x*n0 + bary.y*n1 + bary.z*n2 ));
+    sample_face_norms[index] = optix::normalize(xform_invtrans*face_normal);
 
   }
 }
@@ -128,12 +131,40 @@ double triangle_area(const float3& v0, const float3& v1, const float3& v2)
 }
 
 
-void bake::sample_surface_random(
-    const Mesh& mesh,
+class TriangleSamplerCallback
+{
+public:
+  TriangleSamplerCallback(const unsigned int minSamplesPerTriangle,
+                  const double* areaPerTriangle)
+  : m_minSamplesPerTriangle(minSamplesPerTriangle), 
+    m_areaPerTriangle(areaPerTriangle)
+    {}
+          
+  unsigned int minSamples(size_t i) const {
+    return m_minSamplesPerTriangle;  // same for every triangle
+  }
+  double area(size_t i) const {
+    return m_areaPerTriangle[i];
+  }
+
+private:
+  const unsigned int m_minSamplesPerTriangle;
+  const double* m_areaPerTriangle;
+};
+
+
+void bake::sample_instance(
+    const bake::Instance& instance,
+    const unsigned int seed,
     const size_t min_samples_per_triangle,
-    AOSamples&  ao_samples
+    bake::AOSamples&  ao_samples
     )
 {
+
+  // Setup access to mesh data
+  const bake::Mesh& mesh = *instance.mesh;
+  const optix::Matrix4x4 xform(instance.xform);
+  const optix::Matrix4x4 xform_invtrans = xform.inverse().transpose();
   assert( ao_samples.num_samples >= mesh.num_triangles*min_samples_per_triangle );
   assert( mesh.vertices               );
   assert( mesh.num_vertices           );
@@ -149,60 +180,31 @@ void bake::sample_surface_random(
   float3* sample_positions  = reinterpret_cast<float3*>( ao_samples.sample_positions );   
   float3* sample_norms      = reinterpret_cast<float3*>( ao_samples.sample_normals   );   
   float3* sample_face_norms = reinterpret_cast<float3*>( ao_samples.sample_face_normals );
-  SampleInfo* sample_infos = ao_samples.sample_infos;
+  bake::SampleInfo* sample_infos = ao_samples.sample_infos;
 
-  size_t sample_idx = 0;  // counter for entire mesh
-  std::vector<size_t> tri_sample_counts(mesh.num_triangles, 0);
 
-  // First place minimum number of samples per triangle.
-  for ( size_t tri_idx = 0; tri_idx < mesh.num_triangles; tri_idx++ )
-  {
-    sample_triangle(tri_vertex_indices, verts, tri_normal_indices, normals, tri_idx, 0, min_samples_per_triangle,
-      sample_positions, sample_norms, sample_face_norms, sample_infos, sample_idx /*inout*/);
-    tri_sample_counts[tri_idx] += min_samples_per_triangle;
-  }
-
-  // Then do area-based sampling
-  std::vector<double> tri_areas(mesh.num_triangles);
-  double mesh_area = 0.0;
-  for ( size_t tri_idx = 0; tri_idx < mesh.num_triangles; tri_idx++ )
-  {
+  // Compute triangle areas
+  std::vector<double> tri_areas(mesh.num_triangles, 0.0);
+  for ( size_t tri_idx = 0; tri_idx < mesh.num_triangles; tri_idx++ ) {
     const int3& tri = tri_vertex_indices[tri_idx];
-    double area = triangle_area(verts[tri.x], verts[tri.y], verts[tri.z]);
+    const double area = triangle_area(xform*verts[tri.x], xform*verts[tri.y], xform*verts[tri.z]);
     tri_areas[tri_idx] = area;
-    mesh_area += area;
   }
 
-  const size_t num_mesh_samples = ao_samples.num_samples - sample_idx;
-  for ( size_t tri_idx = 0; tri_idx < mesh.num_triangles && sample_idx < ao_samples.num_samples; tri_idx++ )
-  {
-    const size_t num_samples = std::min(ao_samples.num_samples - sample_idx, static_cast<size_t>(num_mesh_samples * tri_areas[tri_idx] / mesh_area));
-    sample_triangle(tri_vertex_indices, verts, tri_normal_indices, normals,
-      tri_idx, tri_sample_counts[tri_idx], tri_sample_counts[tri_idx] + num_samples, 
-      sample_positions, sample_norms, sample_face_norms, sample_infos, sample_idx /*inout*/);
-    tri_sample_counts[tri_idx] += num_samples;
-  }
+  // Get sample counts
+  std::vector<unsigned int> tri_sample_counts(mesh.num_triangles, 0);
+  TriangleSamplerCallback cb((unsigned)min_samples_per_triangle, &tri_areas[0]);
+  distribute_samples_generic(cb, ao_samples.num_samples, mesh.num_triangles, &tri_sample_counts[0]);
 
-  // There could be a few samples left over. Place one sample per triangle until target sample count is reached. 
-  assert( ao_samples.num_samples - sample_idx <= mesh.num_triangles );
-  for ( size_t tri_idx = 0; tri_idx < mesh.num_triangles && sample_idx < ao_samples.num_samples; tri_idx++) {
-    sample_triangle(tri_vertex_indices, verts, tri_normal_indices, normals, 
-      tri_idx, tri_sample_counts[tri_idx], tri_sample_counts[tri_idx] + 1,
-      sample_positions, 
-      sample_norms, sample_face_norms, sample_infos, sample_idx /*inout*/);
-    tri_sample_counts[tri_idx] += 1;
-  }
-
-  // Compute dA per sample
-  {
-    size_t k = 0;
-    for ( size_t tri_idx = 0; tri_idx < mesh.num_triangles; ++tri_idx ) {
-      assert( tri_sample_counts[tri_idx] > 0 );
-      const float dA = static_cast<float>(tri_areas[tri_idx] / tri_sample_counts[tri_idx]);
-      for ( size_t i = 0; i < tri_sample_counts[tri_idx]; ++i ) {
-        sample_infos[k++].dA = dA;
-      }
-    }
+  // Place samples
+  size_t sample_idx = 0;
+  for (size_t tri_idx = 0; tri_idx < mesh.num_triangles; tri_idx++) {
+    sample_triangle(xform, xform_invtrans,
+      tri_vertex_indices, verts, tri_normal_indices, normals, 
+      tri_idx, tri_sample_counts[tri_idx], tri_areas[tri_idx],
+      seed,
+      sample_positions+sample_idx, sample_norms+sample_idx, sample_face_norms+sample_idx, sample_infos+sample_idx);
+    sample_idx += tri_sample_counts[tri_idx];
   }
 
   assert( sample_idx == ao_samples.num_samples );
@@ -215,4 +217,72 @@ void bake::sample_surface_random(
 #endif
 
 }
+
+class InstanceSamplerCallback
+{
+public:
+  InstanceSamplerCallback(const unsigned int* minSamplesPerInstance,
+                  const double* areaPerInstance)
+  : m_minSamplesPerInstance(minSamplesPerInstance), 
+    m_areaPerInstance(areaPerInstance)
+    {}
+          
+  unsigned int minSamples(size_t i) const {
+    return m_minSamplesPerInstance[i];
+  }
+  double area(size_t i) const {
+    return m_areaPerInstance[i];
+  }
+
+private:
+  const unsigned int* m_minSamplesPerInstance;
+  const double* m_areaPerInstance;
+};
+
+
+size_t bake::distribute_samples(
+    const bake::Instance* instances,
+    const size_t num_instances,
+    const size_t min_samples_per_triangle,
+    const size_t requested_num_samples,
+    unsigned int* num_samples_per_instance
+    )
+{
+
+  // Compute min samples per instance
+  std::vector<unsigned int> min_samples_per_instance(num_instances);
+  size_t num_triangles = 0;
+  for (size_t i = 0; i < num_instances; ++i) {
+    min_samples_per_instance[i] = (unsigned int)(min_samples_per_triangle * instances[i].mesh->num_triangles); 
+    num_triangles += instances[i].mesh->num_triangles;
+  }
+  const size_t min_num_samples = min_samples_per_triangle*num_triangles;
+  size_t num_samples = std::max(min_num_samples, requested_num_samples);
+
+  // Compute surface area per instance
+  std::vector<double> area_per_instance(num_instances, 0.0);
+  if (num_samples > min_num_samples) {
+
+    for (size_t idx = 0; idx < num_instances; ++idx) {
+      const bake::Mesh& mesh = *instances[idx].mesh;
+      const optix::Matrix4x4 xform(instances[idx].xform);
+      const int3* tri_vertex_indices  = reinterpret_cast<int3*>( mesh.tri_vertex_indices );
+      const float3* verts = reinterpret_cast<float3*>( mesh.vertices );
+      for (size_t tri_idx = 0; tri_idx < mesh.num_triangles; ++tri_idx) {
+        const int3& tri = tri_vertex_indices[tri_idx];
+        double area = triangle_area(xform*verts[tri.x], xform*verts[tri.y], xform*verts[tri.z]);
+        area_per_instance[idx] += area;
+      }
+    }
+
+  }
+
+  // Distribute samples
+  InstanceSamplerCallback cb(&min_samples_per_instance[0], &area_per_instance[0]);
+  distribute_samples_generic(cb, num_samples, num_instances, num_samples_per_instance);
+
+  return num_samples;
+
+}
+
 

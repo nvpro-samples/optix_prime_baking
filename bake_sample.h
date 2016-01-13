@@ -25,7 +25,12 @@
 namespace bake
 {
 
-void sample_surface_random( const Mesh& mesh, const size_t min_samples_per_triangle, AOSamples& ao_samples );
+size_t distribute_samples( const Instance* instances,
+  const size_t num_instances, const size_t min_samples_per_triangle, 
+  const size_t requested_num_samples, unsigned int* num_samples_per_instance );
+
+void sample_instance(const Instance& instance, const unsigned int seed,  const size_t min_samples_per_triangle,
+    AOSamples& ao_samples);
 
 }
 

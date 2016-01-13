@@ -25,6 +25,7 @@
 #include "bake_util.h"
 
 #include <main.h>
+#include <optixu/optixu_matrix_namespace.h>
 
 #include <algorithm>
 #include <cassert>
@@ -32,6 +33,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <set>
 
 const size_t NUM_RAYS = 64;
 const size_t SAMPLES_PER_FACE = 3;
@@ -39,20 +41,18 @@ const size_t SAMPLES_PER_FACE = 3;
 
 // For parsing command line into constants
 struct Config {
-  std::string obj_filename;
+  std::vector<std::string> obj_filenames;
+  size_t num_instances_per_mesh;
   int num_samples;
   int min_samples_per_face;
   int num_rays;
   bake::VertexFilterMode filter_mode;
   float regularization_weight;
+  bool use_ground_plane_blocker;
 
   Config( int argc, const char ** argv ) {
     // set defaults
-#ifdef PROJECT_ABSDIRECTORY
-    obj_filename = std::string(PROJECT_ABSDIRECTORY) + std::string("/assets/lucy.obj");
-#else
-    obj_filename = std::string( "./assets/lucy.obj" );
-#endif
+    num_instances_per_mesh = 1;
     num_samples = 0;  // default means determine from mesh
     min_samples_per_face = SAMPLES_PER_FACE;
     num_rays    = NUM_RAYS; 
@@ -62,6 +62,7 @@ struct Config {
     filter_mode = bake::VERTEX_FILTER_AREA_BASED;
 #endif
     regularization_weight = 0.1f;
+    use_ground_plane_blocker = true;
 
     // parse arguments
     for ( int i = 1; i < argc; ++i ) 
@@ -73,8 +74,17 @@ struct Config {
       } 
       else if( (arg == "-o" || arg == "--obj") && i+1 < argc ) 
       {
-        obj_filename = argv[++i];
+        std::string str = argv[++i];
+        obj_filenames.push_back(str);
       } 
+      else if ( (arg == "-i" || arg == "--instances") && i+1 < argc )
+      {
+        int n = -1;
+        if( (sscanf( argv[++i], "%d", &n ) != 1) || n < 1 ) {
+          printParseErrorAndExit( argv[0], arg, argv[i] );
+        }
+        num_instances_per_mesh = static_cast<size_t>(n);
+      }
       else if ( (arg == "-s" || arg == "--samples") && i+1 < argc )
       {
         if( sscanf( argv[++i], "%d", &num_samples ) != 1 ) {
@@ -94,16 +104,11 @@ struct Config {
           printParseErrorAndExit( argv[0], arg, argv[i] );
         }
       }
-      else if ( (arg == "-l" || arg == "--least_squares " ) && i+1 < argc ) {
-        int flag = 0;
-        if( sscanf( argv[++i], "%d", &flag ) != 1 ) {
-          printParseErrorAndExit( argv[0], arg, argv[i] );
-        }
-        if (flag) {
-          filter_mode = bake::VERTEX_FILTER_LEAST_SQUARES;
-        } else {
-          filter_mode = bake::VERTEX_FILTER_AREA_BASED;  
-        }
+      else if ( (arg == "--no_ground_plane" ) ) {
+        use_ground_plane_blocker = false;
+      }
+      else if ( (arg == "--no_least_squares" ) ) {
+        filter_mode = bake::VERTEX_FILTER_AREA_BASED;  
       }
       else if ( (arg == "-w" || arg == "--regularization_weight" ) && i+1 < argc ) {
         if( sscanf( argv[++i], "%f", &regularization_weight ) != 1 ) {
@@ -117,6 +122,15 @@ struct Config {
         printUsageAndExit( argv[0] );
       }
     }
+
+    if (obj_filenames.empty()) {
+      // default filename
+#ifdef PROJECT_ABSDIRECTORY
+      obj_filenames.push_back(std::string(PROJECT_ABSDIRECTORY) + std::string("/assets/lucy.obj"));
+#else
+      obj_filenames.push_back(std::string( "./assets/lucy.obj" ));
+#endif
+    }
   }
 
   void printUsageAndExit( const char* argv0 )
@@ -125,12 +139,16 @@ struct Config {
     << "Usage  : " << argv0 << " [options]\n"
     << "App options:\n"
     << "  -h  | --help                          Print this usage message\n"
-    << "  -l  | --least_squares <0|1>           Enable or disable least squares filtering (default 1 if built with Eigen3)\n"
-    << "  -o  | --obj <obj_file>                Specify model to be rendered\n"
+    << "  -o  | --obj <obj_file>                Specify model to be rendered.  Repeat this flag for multiple models.\n"
+    << "  -i  | --instances <n>                 Number of instances per mesh (default 1).  For testing.\n"
     << "  -r  | --rays    <n>                   Number of rays per sample point for gather (default " << NUM_RAYS << ")\n"
     << "  -s  | --samples <n>                   Number of sample points on mesh (default " << SAMPLES_PER_FACE << " per face; any extra samples are based on area)\n"
     << "  -t  | --samples_per_face <n>          Minimum number of samples per face (default " << SAMPLES_PER_FACE << ")\n"
+    << "        --no_ground_plane               Disable virtual XZ ground plane\n"
+#ifdef EIGEN3_ENABLED
     << "  -w  | --regularization_weight <w>     Regularization weight for least squares, 0-1 range. (default 0.1)\n"
+    << "        --no_least_squares              Disable least squares filtering\n"
+#endif
     << std::endl;
     
     exit(1);
@@ -144,6 +162,133 @@ struct Config {
 
 
 };
+
+namespace {
+
+  void xform_bbox(const optix::Matrix4x4& mat, const float in_min[3], const float in_max[3],
+                  float out_min[3], float out_max[3])
+  {
+    float4 a = mat*optix::make_float4( in_min[0], in_min[1], in_min[2], 1.0f);
+    float4 b = mat*optix::make_float4( in_max[0], in_max[1], in_max[2], 1.0f);
+    for (size_t k = 0; k < 3; ++k) {
+      out_min[k] = (&a.x)[k];
+      out_max[k] = (&b.x)[k];
+    }
+  }
+
+  void expand_bbox(float bbox_min[3], float bbox_max[3], float v[3])
+  {
+    for (size_t k = 0; k < 3; ++k) {
+      bbox_min[k] = std::min(bbox_min[k], v[k]);
+      bbox_max[k] = std::max(bbox_max[k], v[k]);
+    }
+  }
+
+  bake::Instance make_ground_plane(float scene_bbox_min[3], float scene_bbox_max[3], 
+                                   std::vector<float>& plane_vertices, std::vector<unsigned int>& plane_indices,
+                                   bake::Mesh* plane_mesh)
+  {
+
+    const unsigned int index_data[] = {0, 1, 2, 0, 2, 3};
+    plane_indices.resize(6);
+    std::copy(index_data, index_data+6, plane_indices.begin());
+    float scene_extents[] = {scene_bbox_max[0] - scene_bbox_min[0],
+                             scene_bbox_max[1] - scene_bbox_min[1],
+                             scene_bbox_max[2] - scene_bbox_min[2]};
+    const float scale_factor = 100.0f;
+    float ground_min[] = {scene_bbox_max[0] - scale_factor*scene_extents[0],
+                          scene_bbox_min[1],
+                          scene_bbox_max[2] - scale_factor*scene_extents[2]};
+    float ground_max[] = {scene_bbox_min[0] + scale_factor*scene_extents[0],
+                          scene_bbox_min[1],
+                          scene_bbox_min[2] + scale_factor*scene_extents[2]};
+    const float vertex_data[] = {ground_min[0], ground_min[1], ground_min[2],
+                                 ground_max[0], ground_min[1], ground_min[2],
+                                 ground_max[0], ground_min[1], ground_max[2],
+                                 ground_min[0], ground_min[1], ground_max[2]};
+    plane_vertices.resize(12);
+    std::copy(vertex_data, vertex_data+12, plane_vertices.begin());
+
+    plane_mesh->num_vertices  = 4;
+    plane_mesh->num_normals   = 0;
+    plane_mesh->num_triangles = 2;
+    plane_mesh->vertices      = &plane_vertices[0];
+    plane_mesh->normals       = NULL;
+    plane_mesh->tri_vertex_indices = &plane_indices[0];
+    plane_mesh->tri_normal_indices = NULL;
+    
+    bake::Instance instance;
+    instance.mesh = plane_mesh;
+
+    const optix::Matrix4x4 mat = optix::Matrix4x4::identity();
+    const float* matdata = mat.getData();
+    std::copy(matdata, matdata+16, instance.xform);
+    
+    for (size_t k = 0; k < 3; ++k) {
+      instance.bbox_min[k] = ground_min[k];
+      instance.bbox_max[k] = ground_max[k];
+    }
+
+    return instance;
+  }
+
+  void make_debug_instances(bake::Mesh* bake_mesh, size_t n, std::vector<bake::Instance>& instances,
+                            float scene_bbox_min[3], float scene_bbox_max[3])
+  {
+
+    // Make up a transform per instance
+    const float3 bbox_base = optix::make_float3(0.5f*(bake_mesh->bbox_min[0] + bake_mesh->bbox_max[0]),
+                                                      bake_mesh->bbox_min[1],
+                                                0.5f*(bake_mesh->bbox_min[2] + bake_mesh->bbox_max[2]));
+    const float rot = 0.5236f;  // pi/6
+    const float3 rot_axis = optix::make_float3(0.0f, 1.0f, 0.0f);
+    const float scale_factor = 0.9f;
+    float scale = scale_factor;
+    const float3 base_translation = 1.01*optix::make_float3(bake_mesh->bbox_max[0] - bake_mesh->bbox_min[0], 0.0f, 0.0f);
+    float3 translation = scale_factor* base_translation;
+
+    for (size_t i = 0; i < n; i++) {
+      bake::Instance instance;
+      instance.mesh = bake_mesh;
+      const optix::Matrix4x4 mat = optix::Matrix4x4::translate(translation) *
+                                   optix::Matrix4x4::translate(bbox_base) *
+                                   optix::Matrix4x4::rotate((i+1)*rot, rot_axis) *
+                                   optix::Matrix4x4::scale(optix::make_float3(scale)) *
+                                   optix::Matrix4x4::translate(-bbox_base);
+      scale *= scale_factor;
+      translation += scale*base_translation;
+
+      xform_bbox(mat, bake_mesh->bbox_min, bake_mesh->bbox_max, instance.bbox_min, instance.bbox_max);
+      expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_min);
+      expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_max);
+
+      const float* matdata = mat.getData();
+      std::copy(matdata, matdata+16, instance.xform);
+      instances.push_back(instance);
+    }
+  }
+
+  void allocate_ao_samples(bake::AOSamples& ao_samples, unsigned int n) {
+    ao_samples.num_samples = n;
+    ao_samples.sample_positions = new float[3*n];
+    ao_samples.sample_normals = new float[3*n];
+    ao_samples.sample_face_normals = new float[3*n];
+    ao_samples.sample_infos = new bake::SampleInfo[n];
+  }
+
+  void destroy_ao_samples(bake::AOSamples& ao_samples) {
+    delete [] ao_samples.sample_positions;
+    ao_samples.sample_positions = NULL;
+    delete [] ao_samples.sample_normals;
+    ao_samples.sample_normals = NULL;
+    delete [] ao_samples.sample_face_normals;
+    ao_samples.sample_face_normals = NULL;
+    delete [] ao_samples.sample_infos;
+    ao_samples.sample_infos = NULL;
+    ao_samples.num_samples = 0;
+  }
+
+}
 
 
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -165,73 +310,109 @@ int sample_main( int argc, const char** argv )
   //
   // Load model file
   //
-  std::cerr << "Load mesh ...              "; std::cerr.flush();
+  std::cerr << "Load meshes ...              "; std::cerr.flush();
 
   timer.start();
-  tinyobj::mesh_t mesh;
-  { 
+  std::vector<tinyobj::mesh_t> meshes;
+  for(size_t i = 0; i < config.obj_filenames.size(); ++i) { 
     std::string errs;
-    bool loaded = tinyobj::LoadObj(mesh, errs, config.obj_filename.c_str());
+    tinyobj::mesh_t mesh;
+    bool loaded = tinyobj::LoadObj(mesh, errs, config.obj_filenames[i].c_str());
     if (!errs.empty() || !loaded) {
       std::cerr << errs << std::endl;
       return 0; 
     }
+    meshes.push_back(mesh);
   }
 
   printTimeElapsed( timer ); 
 
-  int num_samples = config.num_samples;
-  if (num_samples < config.min_samples_per_face*mesh.indices.size()/3) {
-    num_samples = config.min_samples_per_face*int(mesh.indices.size()/3);
+  std::cerr << "Mesh statistics:" << std::endl;
+  for (size_t i = 0; i < config.obj_filenames.size(); ++i) {
+    const tinyobj::mesh_t& mesh = meshes[i];
+    std::cerr << config.obj_filenames[i] << ": " << std::endl << "\t"
+              << mesh.positions.size() << " vertices, "
+              << mesh.normals.size() << " normals, " 
+              << mesh.indices.size()/3 << " triangles" << std::endl;
   }
+  
   std::cerr << "Minimum samples per face: " << config.min_samples_per_face << std::endl;
-  std::cerr << "Total samples: " << num_samples << std::endl;
 
   //
-  // Populate bake::Mesh
+  // Populate instances
   //
-  bake::Mesh bake_mesh = { 0 };
-  bake_mesh.num_vertices  = mesh.positions.size();
-  bake_mesh.num_normals   = mesh.normals.size(); 
-  bake_mesh.num_triangles = mesh.indices.size()/3;
-  bake_mesh.vertices      = &mesh.positions[0];
-  bake_mesh.normals       = mesh.normals.empty() ? NULL : &mesh.normals[0];
-  bake_mesh.tri_vertex_indices = &mesh.indices[0];
-  bake_mesh.tri_normal_indices = mesh.normals.empty() ? NULL : &mesh.indices[0];  //Note: tinyobj flattens mesh data
+  const size_t num_instances = meshes.size() * config.num_instances_per_mesh;
+  std::vector<bake::Instance> instances;
+  instances.reserve(num_instances);
 
-  // Get bbox
+  float scene_bbox_min[] = {FLT_MAX, FLT_MAX, FLT_MAX};
+  float scene_bbox_max[] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+  for (size_t meshIdx = 0; meshIdx < meshes.size(); ++meshIdx) {
+    
+    tinyobj::mesh_t& mesh = meshes[meshIdx];
+    bake::Mesh* bake_mesh = new bake::Mesh;
+    bake_mesh->num_vertices  = mesh.positions.size();
+    bake_mesh->num_normals   = mesh.normals.size(); 
+    bake_mesh->num_triangles = mesh.indices.size()/3;
+    bake_mesh->vertices      = &mesh.positions[0];
+    bake_mesh->normals       = mesh.normals.empty() ? NULL : &mesh.normals[0];
+    bake_mesh->tri_vertex_indices = &mesh.indices[0];
+    bake_mesh->tri_normal_indices = mesh.normals.empty() ? NULL : &mesh.indices[0];  //Note: tinyobj flattens mesh data
 
-  std::fill(bake_mesh.bbox_min, bake_mesh.bbox_min+3, FLT_MAX);
-  std::fill(bake_mesh.bbox_max, bake_mesh.bbox_max+3, -FLT_MAX);
+    // Build bbox for mesh
 
+    std::fill(bake_mesh->bbox_min, bake_mesh->bbox_min+3, FLT_MAX);
+    std::fill(bake_mesh->bbox_max, bake_mesh->bbox_max+3, -FLT_MAX);
+    for (size_t i = 0; i < mesh.positions.size()/3; ++i) {
+      expand_bbox(bake_mesh->bbox_min, bake_mesh->bbox_max, &mesh.positions[3*i]);
+    }
 
-  for (size_t i = 0; i < mesh.positions.size()/3; ++i) {
-    bake_mesh.bbox_min[0] = std::min(bake_mesh.bbox_min[0], mesh.positions[3*i]);
-    bake_mesh.bbox_max[0] = std::max(bake_mesh.bbox_max[0], mesh.positions[3*i]);
-    bake_mesh.bbox_min[1] = std::min(bake_mesh.bbox_min[1], mesh.positions[3*i+1]);
-    bake_mesh.bbox_max[1] = std::max(bake_mesh.bbox_max[1], mesh.positions[3*i+1]);
-    bake_mesh.bbox_min[2] = std::min(bake_mesh.bbox_min[2], mesh.positions[3*i+2]);
-    bake_mesh.bbox_max[2] = std::max(bake_mesh.bbox_max[2], mesh.positions[3*i+2]);
+    // Make instance
+
+    bake::Instance instance;
+    instance.mesh = bake_mesh;  // take ownership
+    const optix::Matrix4x4 mat = optix::Matrix4x4::identity();  // TODO: use transform from file
+    const float* matdata = mat.getData();
+    std::copy(matdata, matdata+16, instance.xform);
+    
+    xform_bbox(mat, bake_mesh->bbox_min, bake_mesh->bbox_max, instance.bbox_min, instance.bbox_max);
+    expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_min);
+    expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_max);
+
+    instances.push_back(instance);
+
+    if (config.num_instances_per_mesh > 1) {
+      make_debug_instances(bake_mesh, config.num_instances_per_mesh-1, instances, scene_bbox_min, scene_bbox_max);
+    }
+    
   }
 
+
+  assert(instances.size() == num_instances);
 
   //
   // Generate AO samples
   //
 
-  std::cerr << "Generate sample points ... "; std::cerr.flush();
+  std::cerr << "Generate sample points ... \n"; std::cerr.flush();
 
   timer.reset();
   timer.start();
-  bake::AOSamples ao_samples = { 0 };
-  ao_samples.num_samples         = num_samples;
-  ao_samples.sample_positions    = new float[num_samples*3];
-  ao_samples.sample_normals      = new float[num_samples*3];
-  ao_samples.sample_face_normals = new float[num_samples*3];
-  ao_samples.sample_infos        = new bake::SampleInfo[num_samples*3];
 
-  bake::sampleSurface( bake_mesh, config.min_samples_per_face, ao_samples );
+  std::vector<unsigned int> num_samples_per_instance(num_instances);
+  const size_t total_samples = bake::distributeSamples( &instances[0], instances.size(), config.min_samples_per_face, config.num_samples,
+    &num_samples_per_instance[0]);
+
+  std::vector<bake::AOSamples> ao_samples(num_instances);
+  for (size_t i = 0; i < num_instances; ++i) {
+    allocate_ao_samples( ao_samples[i], num_samples_per_instance[i] );
+    bake::sampleInstance( instances[i], (unsigned)i, config.min_samples_per_face, ao_samples[i] );
+    std::cerr << "sampled instance " << i << ": " << num_samples_per_instance[i] << std::endl;
+  }
+  
   printTimeElapsed( timer ); 
+
+  std::cerr << "Total samples: " << total_samples << std::endl;
 
   //
   // Evaluate AO samples 
@@ -240,23 +421,57 @@ int sample_main( int argc, const char** argv )
   
   timer.reset();
   timer.start();
-  float* ao_values = new float[ num_samples ];
-  bake::computeAO( bake_mesh, ao_samples, config.num_rays, ao_values );
+  float** ao_values = new float*[ num_instances ];
+  for (size_t i = 0; i < num_instances; ++i) {
+    ao_values[i] = new float[ ao_samples[i].num_samples ];
+  }
+
+  if (config.use_ground_plane_blocker) {
+    // Add blocker for ground plane (no surface samples)
+    std::vector<bake::Instance> blockers;
+    std::vector<float> plane_vertices;
+    std::vector<unsigned int> plane_indices;
+    bake::Mesh plane_mesh;
+    blockers.push_back(make_ground_plane(scene_bbox_min, scene_bbox_max, plane_vertices, plane_indices, &plane_mesh));
+    bake::computeAOWithBlockers( &instances[0], num_instances, &blockers[0], blockers.size(), &ao_samples[0], config.num_rays, ao_values );
+  } else {
+    bake::computeAO( &instances[0], num_instances, &ao_samples[0], config.num_rays, ao_values );
+  }
   printTimeElapsed( timer ); 
 
   std::cerr << "Map AO to vertices  ...    "; std::cerr.flush();
 
   timer.reset();
   timer.start();
-  float* vertex_ao = new float[ bake_mesh.num_vertices ];
-  bake::mapAOToVertices( bake_mesh, ao_samples, ao_values, config.filter_mode, config.regularization_weight, vertex_ao );
+  float** vertex_ao = new float*[ num_instances ];
+  for (size_t i = 0; i < num_instances; ++i ) {
+    vertex_ao[i] = new float[ instances[i].mesh->num_vertices ];
+    bake::mapAOToVertices( *instances[i].mesh, ao_samples[i], ao_values[i], config.filter_mode, config.regularization_weight, vertex_ao[i] );
+  }
   printTimeElapsed( timer ); 
 
   //
   // Visualize results
   //
   std::cerr << "Launch viewer  ... \n" << std::endl;
-  bake::view( bake_mesh, vertex_ao );
+  bake::view( &instances[0], instances.size(), vertex_ao, scene_bbox_min, scene_bbox_max );
+
+  // Clean up instances, being careful not to double delete
+  std::set<bake::Mesh*> freed_meshes;
+  for (size_t i = 0; i < instances.size(); ++i) {
+    if (freed_meshes.find(instances[i].mesh) == freed_meshes.end()) {
+      freed_meshes.insert(instances[i].mesh);
+      delete instances[i].mesh; 
+      instances[i].mesh = NULL;
+    }
+    delete [] ao_values[i];
+    delete [] vertex_ao[i];
+
+    destroy_ao_samples(ao_samples[i]);
+
+  }
+  delete [] ao_values;
+  delete [] vertex_ao;
   
   return 1;
 }
