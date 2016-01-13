@@ -68,7 +68,7 @@ Mesh detail showing triangle size:
 
 #### Instancing
 
-All geometry consists of *instances*, which are pairs of meshes and transforms.  A mesh referenced by multiple instances is only stored once in memory.  For example, the scene below has 3 instances of a mesh with 1.3M triangles, and requires less than 1 GB of GPU memory.  This scene also has an invisible ground plane marked as a *blocker*.
+All geometry consists of *instances*, which are pairs of meshes and transforms.  A mesh referenced by multiple instances is only stored once in memory.  For example, the scene below has 3 instances of a mesh with 1.3M triangles, and was baked using less than 1 GB of GPU memory for the scene, rays, etc.  This scene also has an invisible ground plane marked as a *blocker*.
 
 ![Instancing Example](https://github.com/nvpro-samples/optix_prime_baking/blob/master/doc/hunter_instances.png)
 
