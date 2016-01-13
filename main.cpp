@@ -240,7 +240,7 @@ namespace {
     const float3 bbox_base = optix::make_float3(0.5f*(bake_mesh->bbox_min[0] + bake_mesh->bbox_max[0]),
                                                       bake_mesh->bbox_min[1],
                                                 0.5f*(bake_mesh->bbox_min[2] + bake_mesh->bbox_max[2]));
-    const float rot = M_PI/6.0f;
+    const float rot = 0.5236f;  // pi/6
     const float3 rot_axis = optix::make_float3(0.0f, 1.0f, 0.0f);
     const float scale_factor = 0.9f;
     float scale = scale_factor;

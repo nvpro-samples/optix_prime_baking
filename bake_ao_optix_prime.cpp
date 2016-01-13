@@ -125,6 +125,7 @@ void bake::ao_optix_prime(
   Timer updateao_timer;
   Timer copyao_timer;
 
+  unsigned seed = 0;
   for (size_t idx = 0; idx < num_instances; ++idx) {
 
     // Split sample points into batches
@@ -132,7 +133,7 @@ void bake::ao_optix_prime(
     const bake::AOSamples& ao_samples = ao_samples_per_instance[idx];
     const size_t num_batches = std::max(idivCeil(ao_samples.num_samples, batch_size), size_t(1));
 
-    for (size_t batch_idx = 0; batch_idx < num_batches; batch_idx++) {
+    for (size_t batch_idx = 0; batch_idx < num_batches; batch_idx++, seed++) {
 
       setup_timer.start();
       const size_t sample_offset = batch_idx*batch_size;
@@ -171,7 +172,6 @@ void bake::ao_optix_prime(
                                                    bbox_max.z - bbox_min.z );
       setup_timer.stop();
 
-      const unsigned int seed = idx;
       for( int i = 0; i < sqrt_rays_per_sample; ++i )
       for( int j = 0; j < sqrt_rays_per_sample; ++j )
       {

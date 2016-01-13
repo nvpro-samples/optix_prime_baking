@@ -78,7 +78,7 @@ public:
     if (!m_prog.compileProgram(vertex_program, NULL, fragment_program)) return false;
 
     m_vaos.resize(m_num_instances);
-    glGenVertexArrays(m_num_instances, &m_vaos[0]);
+    glGenVertexArrays((GLsizei)m_num_instances, &m_vaos[0]);
     for (size_t i = 0; i < m_num_instances; ++i) {
       glBindVertexArray(m_vaos[i]);
 
