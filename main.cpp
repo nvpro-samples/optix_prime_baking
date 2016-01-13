@@ -114,7 +114,7 @@ struct Config {
         if( sscanf( argv[++i], "%f", &regularization_weight ) != 1 ) {
           printParseErrorAndExit( argv[0], arg, argv[i] );
         }
-        regularization_weight = std::min( std::max( regularization_weight, 0.0f ), 1.0f );
+        regularization_weight = std::max( regularization_weight, 0.0f );
       }
       else 
       {
@@ -146,7 +146,7 @@ struct Config {
     << "  -t  | --samples_per_face <n>          Minimum number of samples per face (default " << SAMPLES_PER_FACE << ")\n"
     << "        --no_ground_plane               Disable virtual XZ ground plane\n"
 #ifdef EIGEN3_ENABLED
-    << "  -w  | --regularization_weight <w>     Regularization weight for least squares, 0-1 range. (default 0.1)\n"
+    << "  -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default 0.1)\n"
     << "        --no_least_squares              Disable least squares filtering\n"
 #endif
     << std::endl;

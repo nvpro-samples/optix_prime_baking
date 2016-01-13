@@ -318,7 +318,7 @@ void bake::filter_least_squares(
     timer.reset();
     timer.start();
 
-    SparseMatrix A = mass_matrix + 0.1*regularization_matrix;
+    SparseMatrix A = mass_matrix + regularization_weight*regularization_matrix;
     solver.compute(A);
 
     std::cerr << "\tdecompose matrix ...            ";  printTimeElapsed( timer );
