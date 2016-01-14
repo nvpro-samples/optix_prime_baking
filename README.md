@@ -34,7 +34,7 @@ Quick build instructions:
 
 3) Open CMake-gui (Windows) or ccmake (Linux):
   - Source code to: /nvpro_ samples/build_all
-  - Build folder: /nvpro_samples/build
+  - Build folder: /nvpro_samples/build_all/build
   - Configure and select a compiler if prompted.
   - Generate
 
