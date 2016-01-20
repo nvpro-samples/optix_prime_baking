@@ -403,11 +403,22 @@ int sample_main( int argc, const char** argv )
   const size_t total_samples = bake::distributeSamples( &instances[0], instances.size(), config.min_samples_per_face, config.num_samples,
     &num_samples_per_instance[0]);
 
-  std::vector<bake::AOSamples> ao_samples(num_instances);
-  for (size_t i = 0; i < num_instances; ++i) {
-    allocate_ao_samples( ao_samples[i], num_samples_per_instance[i] );
-    bake::sampleInstance( instances[i], (unsigned)i, config.min_samples_per_face, ao_samples[i] );
-    std::cerr << "sampled instance " << i << ": " << num_samples_per_instance[i] << std::endl;
+  bake::AOSamples ao_samples;
+  allocate_ao_samples( ao_samples, total_samples );
+  
+  // Pointers into the flat samples above
+  std::vector<bake::AOSamples> ao_samples_per_instance(num_instances);
+  {
+    size_t sample_offset = 0;
+    for (size_t i = 0; i < num_instances; ++i) {
+      ao_samples_per_instance[i].num_samples = num_samples_per_instance[i];
+      ao_samples_per_instance[i].sample_positions = ao_samples.sample_positions + 3*sample_offset;
+      ao_samples_per_instance[i].sample_normals = ao_samples.sample_normals + 3*sample_offset;
+      ao_samples_per_instance[i].sample_face_normals = ao_samples.sample_face_normals + 3*sample_offset;
+      ao_samples_per_instance[i].sample_infos = ao_samples.sample_infos + sample_offset;
+      bake::sampleInstance( instances[i], (unsigned)i, config.min_samples_per_face, ao_samples_per_instance[i] );
+      sample_offset += num_samples_per_instance[i];
+    }
   }
   
   printTimeElapsed( timer ); 
@@ -421,9 +432,14 @@ int sample_main( int argc, const char** argv )
   
   timer.reset();
   timer.start();
-  float** ao_values = new float*[ num_instances ];
-  for (size_t i = 0; i < num_instances; ++i) {
-    ao_values[i] = new float[ ao_samples[i].num_samples ];
+
+  std::vector<float> ao_values( total_samples );
+  std::fill( ao_values.begin(), ao_values.end(), 0.0f );
+
+  std::vector<float*> ao_values_per_instance(num_instances);
+  ao_values_per_instance[0] = &ao_values[0];
+  for (size_t i = 1; i < num_instances; ++i) {
+    ao_values_per_instance[i] = ao_values_per_instance[i-1] + num_samples_per_instance[i-1];
   }
 
   if (config.use_ground_plane_blocker) {
@@ -433,9 +449,10 @@ int sample_main( int argc, const char** argv )
     std::vector<unsigned int> plane_indices;
     bake::Mesh plane_mesh;
     blockers.push_back(make_ground_plane(scene_bbox_min, scene_bbox_max, plane_vertices, plane_indices, &plane_mesh));
-    bake::computeAOWithBlockers( &instances[0], num_instances, &blockers[0], blockers.size(), &ao_samples[0], config.num_rays, ao_values );
+    bake::computeAOWithBlockers( &instances[0], num_instances, &blockers[0], blockers.size(), 
+      ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
   } else {
-    bake::computeAO( &instances[0], num_instances, &ao_samples[0], config.num_rays, ao_values );
+    bake::computeAO( &instances[0], num_instances, ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
   }
   printTimeElapsed( timer ); 
 
@@ -446,7 +463,7 @@ int sample_main( int argc, const char** argv )
   float** vertex_ao = new float*[ num_instances ];
   for (size_t i = 0; i < num_instances; ++i ) {
     vertex_ao[i] = new float[ instances[i].mesh->num_vertices ];
-    bake::mapAOToVertices( *instances[i].mesh, ao_samples[i], ao_values[i], config.filter_mode, config.regularization_weight, vertex_ao[i] );
+    bake::mapAOToVertices( *instances[i].mesh, ao_samples_per_instance[i], ao_values_per_instance[i], config.filter_mode, config.regularization_weight, vertex_ao[i] );
   }
   printTimeElapsed( timer ); 
 
@@ -464,13 +481,8 @@ int sample_main( int argc, const char** argv )
       delete instances[i].mesh; 
       instances[i].mesh = NULL;
     }
-    delete [] ao_values[i];
     delete [] vertex_ao[i];
-
-    destroy_ao_samples(ao_samples[i]);
-
   }
-  delete [] ao_values;
   delete [] vertex_ao;
   
   return 1;

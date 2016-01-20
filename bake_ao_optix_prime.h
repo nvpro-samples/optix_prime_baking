@@ -30,9 +30,11 @@ void ao_optix_prime(
     const size_t    num_instances,
     const Instance* blockers,
     const size_t    num_blockers,
-    const AOSamples* ao_samples,
+    const AOSamples& ao_samples,
     const int rays_per_sample,
-    float** ao_values
+    const float* bbox_min,
+    const float* bbox_max,
+    float*  ao_values
     );
 
 }

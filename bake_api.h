@@ -95,9 +95,11 @@ void sampleInstance(
 void computeAO( 
     const Instance*  instances,
     const size_t     num_instances,
-    const AOSamples* ao_samples,
-    int              rays_per_sample,
-    float**          ao_values 
+    const AOSamples& ao_samples,
+    const int        rays_per_sample,
+    const float*     bbox_min,
+    const float*     bbox_max,
+    float*           ao_values 
     );
 
 
@@ -108,9 +110,11 @@ void computeAOWithBlockers(
     const size_t     num_instances,
     const Instance*  blockers,
     const size_t     num_blockers,
-    const AOSamples* ao_samples,
-    int              rays_per_sample,
-    float**          ao_values 
+    const AOSamples& ao_samples,
+    const int        rays_per_sample,
+    const float*     bbox_min,
+    const float*     bbox_max,
+    float*           ao_values 
     );
 
 
