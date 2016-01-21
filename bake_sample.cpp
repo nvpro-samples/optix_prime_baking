@@ -64,8 +64,7 @@ float3 operator*(const optix::Matrix4x4& mat, const float3& v)
 
 
 void sample_triangle(const optix::Matrix4x4& xform, const optix::Matrix4x4& xform_invtrans,
-                     const int3* tri_vertex_indices, const float3* verts,
-                     const int3* tri_normal_indices, const float3* normals,
+                     const int3* tri_vertex_indices, const float3* verts, const float3* normals,
                      const size_t tri_idx, const size_t tri_sample_count, const double tri_area,
                      const unsigned base_seed,
                      float3* sample_positions, float3* sample_norms, float3* sample_face_norms, bake::SampleInfo* sample_infos)
@@ -77,8 +76,8 @@ void sample_triangle(const optix::Matrix4x4& xform, const optix::Matrix4x4& xfor
 
   const float3 face_normal = optix::normalize( optix::cross( v1-v0, v2-v0 ) );
   float3 n0, n1, n2;
-  if (normals && tri_normal_indices) {
-    const int3& nindex = tri_normal_indices[tri_idx];
+  if (normals) {
+    const int3& nindex = tri_vertex_indices[tri_idx];
     n0 = faceforward( normals[nindex.x], face_normal );
     n1 = faceforward( normals[nindex.y], face_normal );
     n2 = faceforward( normals[nindex.z], face_normal );
@@ -174,7 +173,6 @@ void sample_instance(
 
   const int3*   tri_vertex_indices  = reinterpret_cast<int3*>( mesh.tri_vertex_indices );
   const float3* verts = reinterpret_cast<float3*>( mesh.vertices );
-  const int3*   tri_normal_indices = reinterpret_cast<int3*>( mesh.tri_normal_indices );
   const float3* normals        = reinterpret_cast<float3*>( mesh.normals );
 
   float3* sample_positions  = reinterpret_cast<float3*>( ao_samples.sample_positions );   
@@ -200,7 +198,7 @@ void sample_instance(
   size_t sample_idx = 0;
   for (size_t tri_idx = 0; tri_idx < mesh.num_triangles; tri_idx++) {
     sample_triangle(xform, xform_invtrans,
-      tri_vertex_indices, verts, tri_normal_indices, normals, 
+      tri_vertex_indices, verts, normals, 
       tri_idx, tri_sample_counts[tri_idx], tri_areas[tri_idx],
       seed,
       sample_positions+sample_idx, sample_norms+sample_idx, sample_face_norms+sample_idx, sample_infos+sample_idx);

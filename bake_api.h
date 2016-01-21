@@ -45,7 +45,6 @@ struct Mesh
   float*    normals;
   size_t    num_triangles;
   unsigned int* tri_vertex_indices;
-  unsigned int* tri_normal_indices;
   float     bbox_min[3];
   float     bbox_max[3];
 };

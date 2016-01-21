@@ -215,7 +215,6 @@ namespace {
     plane_mesh->vertices      = &plane_vertices[0];
     plane_mesh->normals       = NULL;
     plane_mesh->tri_vertex_indices = &plane_indices[0];
-    plane_mesh->tri_normal_indices = NULL;
     
     bake::Instance instance;
     instance.mesh = plane_mesh;
@@ -357,7 +356,6 @@ int sample_main( int argc, const char** argv )
     bake_mesh->vertices      = &mesh.positions[0];
     bake_mesh->normals       = mesh.normals.empty() ? NULL : &mesh.normals[0];
     bake_mesh->tri_vertex_indices = &mesh.indices[0];
-    bake_mesh->tri_normal_indices = mesh.normals.empty() ? NULL : &mesh.indices[0];  //Note: tinyobj flattens mesh data
 
     // Build bbox for mesh
 
