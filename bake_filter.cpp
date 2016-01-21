@@ -76,7 +76,7 @@ void filter_mesh_area_weighted(
 void bake::filter(
     const Instance*      instances,
     const size_t         num_instances,
-    const unsigned int*  num_samples_per_instance,
+    const size_t*        num_samples_per_instance,
     const AOSamples&     ao_samples,
     const float*         ao_values,
     float**              vertex_ao

@@ -399,7 +399,7 @@ int sample_main( int argc, const char** argv )
   timer.reset();
   timer.start();
 
-  std::vector<unsigned int> num_samples_per_instance(num_instances);
+  std::vector<size_t> num_samples_per_instance(num_instances);
   const size_t total_samples = bake::distributeSamples( &instances[0], instances.size(), config.min_samples_per_face, config.num_samples,
     &num_samples_per_instance[0]);
 
@@ -422,12 +422,6 @@ int sample_main( int argc, const char** argv )
 
   std::vector<float> ao_values( total_samples );
   std::fill( ao_values.begin(), ao_values.end(), 0.0f );
-
-  std::vector<float*> ao_values_per_instance(num_instances);
-  ao_values_per_instance[0] = &ao_values[0];
-  for (size_t i = 1; i < num_instances; ++i) {
-    ao_values_per_instance[i] = ao_values_per_instance[i-1] + num_samples_per_instance[i-1];
-  }
 
   if (config.use_ground_plane_blocker) {
     // Add blocker for ground plane (no surface samples)

@@ -13,7 +13,7 @@ void distribute_samples_generic(
   const T& callback,
   size_t num_samples,
   size_t num_elements,
-  unsigned int* num_samples_per_element
+  size_t* num_samples_per_element
   )
 {
   // First place minimum samples per element
@@ -40,7 +40,7 @@ void distribute_samples_generic(
     // Distribute
     for (size_t i = 0; i < num_elements && sample_count < num_samples; ++i) {
       const size_t n = std::min(num_samples - sample_count, static_cast<size_t>(num_area_based_samples * callback.area(i) / total_area));
-      num_samples_per_element[i] += (unsigned)n;
+      num_samples_per_element[i] += n;
       sample_count += n;
     }
 

@@ -78,17 +78,17 @@ enum VertexFilterMode
 
 size_t distributeSamples(
     const Instance* instances,
-    const size_t num_instances,
-    const size_t min_samples_per_triangle,
-    const size_t requested_num_samples,
-    unsigned int* num_samples_per_instance // output
+    const size_t    num_instances,
+    const size_t    min_samples_per_triangle,
+    const size_t    requested_num_samples,
+    size_t*         num_samples_per_instance // output
     );
 
 
 void sampleInstances(
     const Instance*     instances,
     const size_t        num_instances,
-    const unsigned int* num_samples_per_instance,
+    const size_t*       num_samples_per_instance,
     const size_t        min_samples_per_triangle,
     AOSamples&          ao_samples
     );
@@ -122,8 +122,8 @@ void computeAOWithBlockers(
 void mapAOToVertices(
     const Instance*         instances,
     const size_t            num_instances,
-    const unsigned int*     num_samples_per_instance,
-    const AOSamples&         ao_samples,
+    const size_t*           num_samples_per_instance,
+    const AOSamples&        ao_samples,
     const float*            ao_values,
     const VertexFilterMode  mode,
     const float             regularization_weight,

@@ -192,7 +192,7 @@ void sample_instance(
   }
 
   // Get sample counts
-  std::vector<unsigned int> tri_sample_counts(mesh.num_triangles, 0);
+  std::vector<size_t> tri_sample_counts(mesh.num_triangles, 0);
   TriangleSamplerCallback cb((unsigned)min_samples_per_triangle, &tri_areas[0]);
   distribute_samples_generic(cb, ao_samples.num_samples, mesh.num_triangles, &tri_sample_counts[0]);
 
@@ -222,7 +222,7 @@ void sample_instance(
 void bake::sample_instances(
     const Instance* instances,
     const size_t num_instances,
-    const unsigned int* num_samples_per_instance,
+    const size_t* num_samples_per_instance,
     const size_t min_samples_per_triangle,
     bake::AOSamples&  ao_samples
     )
@@ -271,7 +271,7 @@ size_t bake::distribute_samples(
     const size_t num_instances,
     const size_t min_samples_per_triangle,
     const size_t requested_num_samples,
-    unsigned int* num_samples_per_instance
+    size_t* num_samples_per_instance
     )
 {
 

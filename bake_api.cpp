@@ -70,7 +70,7 @@ size_t bake::distributeSamples(
     const size_t num_instances,
     const size_t min_samples_per_triangle,
     const size_t requested_num_samples,
-    unsigned int*  num_samples_per_instance
+    size_t*  num_samples_per_instance
     )
 {
 
@@ -80,11 +80,11 @@ size_t bake::distributeSamples(
 
 
 void bake::sampleInstances(
-    const Instance*     instances,
-    const size_t        num_instances,
-    const unsigned int* num_samples_per_instance,
-    const size_t        min_samples_per_triangle,
-    AOSamples&          ao_samples
+    const Instance* instances,
+    const size_t    num_instances,
+    const size_t*   num_samples_per_instance,
+    const size_t    min_samples_per_triangle,
+    AOSamples&      ao_samples
     )
 {
 
@@ -95,7 +95,7 @@ void bake::sampleInstances(
 void bake::mapAOToVertices(
     const Instance*         instances,
     const size_t            num_instances,
-    const unsigned int*     num_samples_per_instance,
+    const size_t*           num_samples_per_instance,
     const AOSamples&        ao_samples,
     const float*            ao_values,
     const VertexFilterMode  mode,

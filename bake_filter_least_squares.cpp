@@ -354,7 +354,7 @@ void filter_mesh_least_squares(
 void bake::filter_least_squares(
     const Instance*     instances,
     const size_t        num_instances,
-    const unsigned int* num_samples_per_instance,
+    const size_t*       num_samples_per_instance,
     const AOSamples&    ao_samples,
     const float*        ao_values,
     const float         regularization_weight,
