@@ -74,15 +74,30 @@ void filter_mesh_area_weighted(
 }  // namespace
 
 void bake::filter(
-    const bake::Instance*  instances,
-    const size_t           num_instances,
-    const bake::AOSamples* ao_samples_per_instance,
-    float const* const*    ao_values_per_instance,
-    float**                vertex_ao
+    const Instance*      instances,
+    const size_t         num_instances,
+    const unsigned int*  num_samples_per_instance,
+    const AOSamples&     ao_samples,
+    const float*         ao_values,
+    float**              vertex_ao
     )
 {
+  size_t sample_offset = 0;
   for (size_t i = 0; i < num_instances; ++i) {
-    filter_mesh_area_weighted(*instances[i].mesh, ao_samples_per_instance[i], ao_values_per_instance[i], vertex_ao[i]);
+    // Point to samples for this instance
+    AOSamples instance_ao_samples;
+    instance_ao_samples.num_samples = num_samples_per_instance[i];
+    instance_ao_samples.sample_positions = ao_samples.sample_positions + 3*sample_offset;
+    instance_ao_samples.sample_normals = ao_samples.sample_normals + 3*sample_offset;
+    instance_ao_samples.sample_face_normals = ao_samples.sample_face_normals + 3*sample_offset;
+    instance_ao_samples.sample_infos = ao_samples.sample_infos + sample_offset;
+
+    const float* instance_ao_values = ao_values + sample_offset;
+
+    filter_mesh_area_weighted(*instances[i].mesh, instance_ao_samples, instance_ao_values, vertex_ao[i]);
+
+    sample_offset += num_samples_per_instance[i];
   }
 }
+
 

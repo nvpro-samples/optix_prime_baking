@@ -354,21 +354,35 @@ void filter_mesh_least_squares(
 void bake::filter_least_squares(
     const Instance*     instances,
     const size_t        num_instances,
-    const AOSamples*    ao_samples_per_instance,
-    float const* const* ao_values_per_instance,
+    const unsigned int* num_samples_per_instance,
+    const AOSamples&    ao_samples,
+    const float*        ao_values,
     const float         regularization_weight,
     float**             vertex_ao
     )
 {
 
- Timer mass_matrix_timer;
- Timer regularization_matrix_timer;
- Timer decompose_timer;
- Timer solve_timer;
+  Timer mass_matrix_timer;
+  Timer regularization_matrix_timer;
+  Timer decompose_timer;
+  Timer solve_timer;
 
+  size_t sample_offset = 0;
   for (size_t i = 0; i < num_instances; ++i) {
-    filter_mesh_least_squares(*instances[i].mesh, ao_samples_per_instance[i], ao_values_per_instance[i], regularization_weight, vertex_ao[i],
+    // Point to samples for this instance
+    AOSamples instance_ao_samples;
+    instance_ao_samples.num_samples = num_samples_per_instance[i];
+    instance_ao_samples.sample_positions = ao_samples.sample_positions + 3*sample_offset;
+    instance_ao_samples.sample_normals = ao_samples.sample_normals + 3*sample_offset;
+    instance_ao_samples.sample_face_normals = ao_samples.sample_face_normals + 3*sample_offset;
+    instance_ao_samples.sample_infos = ao_samples.sample_infos + sample_offset;
+
+    const float* instance_ao_values = ao_values + sample_offset;
+
+    filter_mesh_least_squares(*instances[i].mesh, instance_ao_samples, instance_ao_values, regularization_weight, vertex_ao[i],
       mass_matrix_timer, regularization_matrix_timer, decompose_timer, solve_timer);
+
+    sample_offset += num_samples_per_instance[i];
   }
 
   std::cerr << "\n\tbuild mass matrices ...           ";  printTimeElapsed( mass_matrix_timer );

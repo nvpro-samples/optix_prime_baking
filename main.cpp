@@ -464,7 +464,7 @@ int sample_main( int argc, const char** argv )
   for (size_t i = 0; i < num_instances; ++i ) {
     vertex_ao[i] = new float[ instances[i].mesh->num_vertices ];
   }
-  bake::mapAOToVertices( &instances[0], num_instances, &ao_samples_per_instance[0], &ao_values_per_instance[0], config.filter_mode, config.regularization_weight, vertex_ao);
+  bake::mapAOToVertices( &instances[0], num_instances, &num_samples_per_instance[0], ao_samples, &ao_values[0], config.filter_mode, config.regularization_weight, vertex_ao );
 
   printTimeElapsed( timer ); 
 

@@ -28,8 +28,9 @@ namespace bake
   void filter(
       const Instance*      instances,
       const size_t         num_instances,
-      const AOSamples*     ao_samples_per_instance,
-      float const* const*  ao_values_per_instance,
+      const unsigned int*  num_samples_per_instance,
+      const AOSamples&     ao_samples,
+      const float*         ao_values,
       float**              vertex_ao
       );
 }
