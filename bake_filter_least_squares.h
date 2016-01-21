@@ -24,13 +24,13 @@
 
 namespace bake {
 
-
 void filter_least_squares(
-    const Mesh&      mesh,
-    const AOSamples& ao_samples,
-    const float*     ao_values,
-    const float      regularization_weight,
-    float*           vertex_ao
+    const Instance*     instances,
+    const size_t        num_instances,
+    const AOSamples*    ao_samples_per_instance,
+    float const* const* ao_values_per_instance,
+    const float         regularization_weight,
+    float**             vertex_ao
     );
 
 }

@@ -228,28 +228,28 @@ void edgeBasedRegularizer(const float3* verts, size_t num_verts, const int3* fac
 }
 
 
-} //namespace
-
-
-void bake::filter_least_squares(
-    const Mesh&       mesh,
-    const AOSamples&  ao_samples,
+void filter_mesh_least_squares(
+    const bake::Mesh&       mesh,
+    const bake::AOSamples&  ao_samples,
     const float*      ao_values,
     const float       regularization_weight,
-    float*            vertex_ao
+    float*            vertex_ao,
+    Timer&            mass_matrix_timer,
+    Timer&            regularization_matrix_timer,
+    Timer&            decompose_timer,
+    Timer&            solve_timer
     )
 {
   std::fill(vertex_ao, vertex_ao + mesh.num_vertices, 0.0f);
 
-  Timer timer;
-  timer.start();
+  mass_matrix_timer.start();
 
   std::vector< Triplet > triplets;
   triplets.reserve(ao_samples.num_samples * 9);
   const int3* tri_vertex_indices  = reinterpret_cast<int3*>( mesh.tri_vertex_indices );
 
   for (size_t i = 0; i < ao_samples.num_samples; ++i) {
-    const SampleInfo& info = ao_samples.sample_infos[i];
+    const bake::SampleInfo& info = ao_samples.sample_infos[i];
     const int3& tri = tri_vertex_indices[info.tri_idx];
 
     const float val = ao_values[i] * info.dA;
@@ -300,38 +300,31 @@ void bake::filter_least_squares(
     }
   }
 
-  std::cerr << "\n\tbuild mass matrix ...           ";  printTimeElapsed( timer );
-  timer.reset();
-  timer.start();
+  mass_matrix_timer.stop();
   
   Eigen::SimplicialLDLT<SparseMatrix> solver;	
 
   // Optional edge-based regularization for smoother result, see paper for details
   if (regularization_weight > 0.0f) {
-    Timer reg_matrix_timer;
-    reg_matrix_timer.start();
+
+    regularization_matrix_timer.start();
     SparseMatrix regularization_matrix;
     const float3* vertices  = reinterpret_cast<float3*>( mesh.vertices );
     edgeBasedRegularizer(vertices, mesh.num_vertices, tri_vertex_indices, mesh.num_triangles, regularization_matrix);
+    regularization_matrix_timer.stop();
 
-    std::cerr << "\tbuild regularization matrix ... ";  printTimeElapsed( timer );
-    timer.reset();
-    timer.start();
-
+    decompose_timer.start();
     SparseMatrix A = mass_matrix + regularization_weight*regularization_matrix;
     solver.compute(A);
-
-    std::cerr << "\tdecompose matrix ...            ";  printTimeElapsed( timer );
-    timer.reset();
-    timer.start();
+    decompose_timer.stop();
 
   } else {
+    decompose_timer.start();
     solver.compute(mass_matrix);
-
-    std::cerr << "\tdecompose matrix ...            ";  printTimeElapsed( timer );
-    timer.reset();
-    timer.start();
+    decompose_timer.stop();
   }
+
+  solve_timer.start();
 
   assert( solver.info() == Eigen::Success );
 
@@ -344,9 +337,7 @@ void bake::filter_least_squares(
 
   x = solver.solve(b);
 
-  std::cerr << "\tsolve linear system ...         ";  printTimeElapsed( timer );
-  timer.reset();
-  timer.start();
+  solve_timer.stop();
 
   assert( solver.info() == Eigen::Success ); // for debug build
   if ( solver.info() == Eigen::Success ) {
@@ -356,6 +347,37 @@ void bake::filter_least_squares(
   }
 }
 
+
+} //namespace
+
+
+void bake::filter_least_squares(
+    const Instance*     instances,
+    const size_t        num_instances,
+    const AOSamples*    ao_samples_per_instance,
+    float const* const* ao_values_per_instance,
+    const float         regularization_weight,
+    float**             vertex_ao
+    )
+{
+
+ Timer mass_matrix_timer;
+ Timer regularization_matrix_timer;
+ Timer decompose_timer;
+ Timer solve_timer;
+
+  for (size_t i = 0; i < num_instances; ++i) {
+    filter_mesh_least_squares(*instances[i].mesh, ao_samples_per_instance[i], ao_values_per_instance[i], regularization_weight, vertex_ao[i],
+      mass_matrix_timer, regularization_matrix_timer, decompose_timer, solve_timer);
+  }
+
+  std::cerr << "\n\tbuild mass matrices ...           ";  printTimeElapsed( mass_matrix_timer );
+  if (regularization_weight > 0.0f) {
+    std::cerr << "\tbuild regularization matrices ... ";  printTimeElapsed( regularization_matrix_timer );
+  }
+  std::cerr << "\tdecompose matrices ...            ";  printTimeElapsed( decompose_timer );
+  std::cerr << "\tsolve linear systems ...         ";  printTimeElapsed( solve_timer );
+}
 
 #else
 

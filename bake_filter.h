@@ -24,11 +24,13 @@
 
 namespace bake
 {
+
   void filter(
-      const Mesh&       mesh,
-      const AOSamples&  ao_samples,
-      const float*      ao_values,
-      float*            vertex_ao
+      const Instance*      instances,
+      const size_t         num_instances,
+      const AOSamples*     ao_samples_per_instance,
+      float const* const*  ao_values_per_instance,
+      float**              vertex_ao
       );
 }
 

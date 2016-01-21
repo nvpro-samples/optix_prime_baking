@@ -117,16 +117,15 @@ void computeAOWithBlockers(
     float*           ao_values 
     );
 
-
 void mapAOToVertices(
-    const Mesh&             mesh,
-    const AOSamples&        ao_samples,
-    const float*            ao_values,
+    const Instance*         instances,
+    const size_t            num_instances,
+    const AOSamples*        ao_samples_per_instance,
+    float const* const *    ao_values_per_instance,
     const VertexFilterMode  mode,
     const float             regularization_weight,
-    float*                  vertex_ao
+    float**                 vertex_ao
     );
-
 
 void mapAOToTextures(
     );

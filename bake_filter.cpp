@@ -32,13 +32,14 @@
 
 using namespace optix;
 
+namespace {
 
 // Splat area-weighted samples onto vertices
-void bake::filter(
-    const Mesh&       mesh,
-    const AOSamples&  ao_samples,
-    const float*      ao_values,
-    float*            vertex_ao
+void filter_mesh_area_weighted(
+    const bake::Mesh&       mesh,
+    const bake::AOSamples&  ao_samples,
+    const float*            ao_values,
+    float*                  vertex_ao
     )
 {
   std::vector<double> weights(mesh.num_vertices, 0.0);
@@ -47,7 +48,7 @@ void bake::filter(
   const int3* tri_vertex_indices  = reinterpret_cast<int3*>( mesh.tri_vertex_indices );
 
   for (size_t i = 0; i < ao_samples.num_samples; ++i) {
-    const SampleInfo& info = ao_samples.sample_infos[i];
+    const bake::SampleInfo& info = ao_samples.sample_infos[i];
     const int3& tri = tri_vertex_indices[info.tri_idx];
 
     const float val = ao_values[i];
@@ -68,5 +69,20 @@ void bake::filter(
     if (weights[k] > 0.0) vertex_ao[k] /= static_cast<float>(weights[k]);
   }
 
+}
+
+}  // namespace
+
+void bake::filter(
+    const bake::Instance*  instances,
+    const size_t           num_instances,
+    const bake::AOSamples* ao_samples_per_instance,
+    float const* const*    ao_values_per_instance,
+    float**                vertex_ao
+    )
+{
+  for (size_t i = 0; i < num_instances; ++i) {
+    filter_mesh_area_weighted(*instances[i].mesh, ao_samples_per_instance[i], ao_values_per_instance[i], vertex_ao[i]);
+  }
 }
 
