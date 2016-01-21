@@ -405,21 +405,8 @@ int sample_main( int argc, const char** argv )
 
   bake::AOSamples ao_samples;
   allocate_ao_samples( ao_samples, total_samples );
-  
-  // Pointers into the flat samples above
-  std::vector<bake::AOSamples> ao_samples_per_instance(num_instances);
-  {
-    size_t sample_offset = 0;
-    for (size_t i = 0; i < num_instances; ++i) {
-      ao_samples_per_instance[i].num_samples = num_samples_per_instance[i];
-      ao_samples_per_instance[i].sample_positions = ao_samples.sample_positions + 3*sample_offset;
-      ao_samples_per_instance[i].sample_normals = ao_samples.sample_normals + 3*sample_offset;
-      ao_samples_per_instance[i].sample_face_normals = ao_samples.sample_face_normals + 3*sample_offset;
-      ao_samples_per_instance[i].sample_infos = ao_samples.sample_infos + sample_offset;
-      bake::sampleInstance( instances[i], (unsigned)i, config.min_samples_per_face, ao_samples_per_instance[i] );
-      sample_offset += num_samples_per_instance[i];
-    }
-  }
+
+  bake::sampleInstances( &instances[0], num_instances, &num_samples_per_instance[0], config.min_samples_per_face, ao_samples );
   
   printTimeElapsed( timer ); 
 

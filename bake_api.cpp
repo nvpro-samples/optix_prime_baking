@@ -79,15 +79,16 @@ size_t bake::distributeSamples(
 }
 
 
-void bake::sampleInstance(
-    const Instance& instance,
-    const unsigned int seed,
-    const size_t    min_samples_per_triangle,
-    AOSamples&      ao_samples
+void bake::sampleInstances(
+    const Instance*     instances,
+    const size_t        num_instances,
+    const unsigned int* num_samples_per_instance,
+    const size_t        min_samples_per_triangle,
+    AOSamples&          ao_samples
     )
 {
 
-  bake::sample_instance( instance, seed, min_samples_per_triangle, ao_samples );
+  bake::sample_instances( instances, num_instances, num_samples_per_instance, min_samples_per_triangle, ao_samples );
 
 }
 

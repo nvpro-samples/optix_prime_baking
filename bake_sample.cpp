@@ -153,7 +153,7 @@ private:
 };
 
 
-void bake::sample_instance(
+void sample_instance(
     const bake::Instance& instance,
     const unsigned int seed,
     const size_t min_samples_per_triangle,
@@ -217,6 +217,32 @@ void bake::sample_instance(
 #endif
 
 }
+
+
+void bake::sample_instances(
+    const Instance* instances,
+    const size_t num_instances,
+    const unsigned int* num_samples_per_instance,
+    const size_t min_samples_per_triangle,
+    bake::AOSamples&  ao_samples
+    )
+{
+  size_t sample_offset = 0;
+  for (size_t i = 0; i < num_instances; ++i) {
+    // Point to samples for this instance
+    AOSamples instance_ao_samples;
+    instance_ao_samples.num_samples = num_samples_per_instance[i];
+    instance_ao_samples.sample_positions = ao_samples.sample_positions + 3*sample_offset;
+    instance_ao_samples.sample_normals = ao_samples.sample_normals + 3*sample_offset;
+    instance_ao_samples.sample_face_normals = ao_samples.sample_face_normals + 3*sample_offset;
+    instance_ao_samples.sample_infos = ao_samples.sample_infos + sample_offset;
+
+    sample_instance(instances[i], (unsigned int)i, min_samples_per_triangle, instance_ao_samples);
+
+    sample_offset += num_samples_per_instance[i];
+  }
+}
+
 
 class InstanceSamplerCallback
 {

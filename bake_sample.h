@@ -29,8 +29,9 @@ size_t distribute_samples( const Instance* instances,
   const size_t num_instances, const size_t min_samples_per_triangle, 
   const size_t requested_num_samples, unsigned int* num_samples_per_instance );
 
-void sample_instance(const Instance& instance, const unsigned int seed,  const size_t min_samples_per_triangle,
-    AOSamples& ao_samples);
+void sample_instances(const Instance* instances, 
+  const size_t num_instances, const unsigned int* num_samples_per_instance, 
+  const size_t min_samples_per_triangle, AOSamples& ao_samples);
 
 }
 
