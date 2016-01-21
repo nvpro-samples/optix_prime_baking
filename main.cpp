@@ -466,6 +466,8 @@ int sample_main( int argc, const char** argv )
     delete [] vertex_ao[i];
   }
   delete [] vertex_ao;
+
+  destroy_ao_samples( ao_samples );
   
   return 1;
 }
