@@ -158,9 +158,16 @@ struct Butterfly {
 
 typedef std::map<std::pair<int, int>, Butterfly > EdgeMap;
 
-void edgeBasedRegularizer(const float3* verts, size_t num_verts, const int3* faces, const size_t num_faces,
+const float3* get_vertex(const float* v, unsigned stride_bytes, int index)
+{
+  return reinterpret_cast<const float3*>(reinterpret_cast<const unsigned char*>(v) + index*stride_bytes);
+}
+
+void edgeBasedRegularizer(const float* verts, size_t num_verts, unsigned vertex_stride_bytes, const int3* faces, const size_t num_faces,
   SparseMatrix &regularization_matrix)
 {
+  const unsigned stride_bytes = vertex_stride_bytes > 0 ? vertex_stride_bytes : 3*sizeof(float);
+
   // Build edge map.  Each non-boundary edge stores the two opposite "butterfly" vertices that do not lie on the edge.
   EdgeMap edges;
 
@@ -198,8 +205,8 @@ void edgeBasedRegularizer(const float3* verts, size_t num_verts, const int3* fac
 
     Vector3 butterfly_verts[4];
     for (size_t i = 0; i < 4; ++i) {
-      const float3& v = verts[vertIdx[i]];
-      butterfly_verts[i] = Vector3(v.x, v.y, v.z);
+      const float3* v = get_vertex(verts, stride_bytes, vertIdx[i]);
+      butterfly_verts[i] = Vector3(v->x, v->y, v->z);
     }
 
     Matrix24 GD;
@@ -309,8 +316,7 @@ void filter_mesh_least_squares(
 
     regularization_matrix_timer.start();
     SparseMatrix regularization_matrix;
-    const float3* vertices  = reinterpret_cast<float3*>( mesh.vertices );
-    edgeBasedRegularizer(vertices, mesh.num_vertices, tri_vertex_indices, mesh.num_triangles, regularization_matrix);
+    edgeBasedRegularizer(mesh.vertices, mesh.num_vertices, mesh.vertex_stride_bytes, tri_vertex_indices, mesh.num_triangles, regularization_matrix);
     regularization_matrix_timer.stop();
 
     decompose_timer.start();

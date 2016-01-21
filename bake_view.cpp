@@ -92,8 +92,11 @@ public:
 
       const size_t vertex_count = m_instances[i].mesh->num_vertices;
       const float* positions = m_instances[i].mesh->vertices;
-      glBufferData(GL_ARRAY_BUFFER, sizeof(float)*vertex_count*3, positions, GL_STATIC_DRAW);
-      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, /*stride*/ 0, /*offset*/ 0);
+      const unsigned vertex_stride_bytes = m_instances[i].mesh->vertex_stride_bytes > 0 ? 
+                                           m_instances[i].mesh->vertex_stride_bytes :
+                                           3*sizeof(float);
+      glBufferData(GL_ARRAY_BUFFER, vertex_count*vertex_stride_bytes, positions, GL_STATIC_DRAW);
+      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, vertex_stride_bytes, /*offset*/ 0);
       glEnableVertexAttribArray(0);
 
       // Occlusion values

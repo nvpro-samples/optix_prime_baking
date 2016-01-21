@@ -64,7 +64,7 @@ void createInstances( Context& context, const bake::Instance* instances, const s
       const bake::Mesh& mesh = *instances[i].mesh;
       model->setTriangles(
           mesh.num_triangles, RTP_BUFFER_TYPE_HOST, mesh.tri_vertex_indices,
-          mesh.num_vertices,  RTP_BUFFER_TYPE_HOST, mesh.vertices
+          mesh.num_vertices,  RTP_BUFFER_TYPE_HOST, mesh.vertices, mesh.vertex_stride_bytes
           );
       model->update( 0 );
       models.push_back(model);  // Model is ref counted, so need to return it to prevent destruction

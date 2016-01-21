@@ -184,7 +184,7 @@ namespace {
     }
   }
 
-  bake::Instance make_ground_plane(float scene_bbox_min[3], float scene_bbox_max[3], 
+  bake::Instance make_ground_plane(float scene_bbox_min[3], float scene_bbox_max[3], unsigned scene_vertex_stride_bytes,
                                    std::vector<float>& plane_vertices, std::vector<unsigned int>& plane_indices,
                                    bake::Mesh* plane_mesh)
   {
@@ -206,14 +206,26 @@ namespace {
                                  ground_max[0], ground_min[1], ground_min[2],
                                  ground_max[0], ground_min[1], ground_max[2],
                                  ground_min[0], ground_min[1], ground_max[2]};
-    plane_vertices.resize(12);
-    std::copy(vertex_data, vertex_data+12, plane_vertices.begin());
+
+    // OptiX Prime requires all meshes in the same scene to have the same vertex stride.
+    const unsigned vertex_stride_bytes = scene_vertex_stride_bytes > 0 ? scene_vertex_stride_bytes : 3*sizeof(float);
+    assert(vertex_stride_bytes % sizeof(float) == 0);
+    const unsigned num_floats_per_vert = vertex_stride_bytes / sizeof(float);
+    plane_vertices.resize(4*(num_floats_per_vert));
+    std::fill(plane_vertices.begin(), plane_vertices.end(), 0.0f);
+    for (size_t i = 0; i < 4; ++i) {
+      plane_vertices[num_floats_per_vert*i  ] = vertex_data[3*i];
+      plane_vertices[num_floats_per_vert*i+1] = vertex_data[3*i+1];
+      plane_vertices[num_floats_per_vert*i+2] = vertex_data[3*i+2];
+    }
 
     plane_mesh->num_vertices  = 4;
     plane_mesh->num_normals   = 0;
     plane_mesh->num_triangles = 2;
     plane_mesh->vertices      = &plane_vertices[0];
+    plane_mesh->vertex_stride_bytes = vertex_stride_bytes;
     plane_mesh->normals       = NULL;
+    plane_mesh->normal_stride_bytes = 0;
     plane_mesh->tri_vertex_indices = &plane_indices[0];
     
     bake::Instance instance;
@@ -330,8 +342,8 @@ int sample_main( int argc, const char** argv )
   for (size_t i = 0; i < config.obj_filenames.size(); ++i) {
     const tinyobj::mesh_t& mesh = meshes[i];
     std::cerr << config.obj_filenames[i] << ": " << std::endl << "\t"
-              << mesh.positions.size() << " vertices, "
-              << mesh.normals.size() << " normals, " 
+              << mesh.positions.size()/3 << " vertices, "
+              << mesh.normals.size()/3 << " normals, " 
               << mesh.indices.size()/3 << " triangles" << std::endl;
   }
   
@@ -350,11 +362,13 @@ int sample_main( int argc, const char** argv )
     
     tinyobj::mesh_t& mesh = meshes[meshIdx];
     bake::Mesh* bake_mesh = new bake::Mesh;
-    bake_mesh->num_vertices  = mesh.positions.size();
-    bake_mesh->num_normals   = mesh.normals.size(); 
+    bake_mesh->num_vertices  = mesh.positions.size()/3;
+    bake_mesh->num_normals   = mesh.normals.size()/3;
     bake_mesh->num_triangles = mesh.indices.size()/3;
     bake_mesh->vertices      = &mesh.positions[0];
+    bake_mesh->vertex_stride_bytes = 0;
     bake_mesh->normals       = mesh.normals.empty() ? NULL : &mesh.normals[0];
+    bake_mesh->normal_stride_bytes = 0;
     bake_mesh->tri_vertex_indices = &mesh.indices[0];
 
     // Build bbox for mesh
@@ -387,6 +401,14 @@ int sample_main( int argc, const char** argv )
 
 
   assert(instances.size() == num_instances);
+
+  // OptiX Prime requires all instances to have the same vertex stride
+  for (size_t i = 1; i < instances.size(); ++i) {
+    if (instances[i].mesh->vertex_stride_bytes != instances[0].mesh->vertex_stride_bytes) {
+      std::cerr << "Error: all meshes must have the same vertex stride.  Bailing.\n";
+      exit(-1);
+    }
+  }
 
   //
   // Generate AO samples
@@ -427,7 +449,8 @@ int sample_main( int argc, const char** argv )
     std::vector<float> plane_vertices;
     std::vector<unsigned int> plane_indices;
     bake::Mesh plane_mesh;
-    blockers.push_back(make_ground_plane(scene_bbox_min, scene_bbox_max, plane_vertices, plane_indices, &plane_mesh));
+    blockers.push_back(make_ground_plane(scene_bbox_min, scene_bbox_max, instances[0].mesh->vertex_stride_bytes, 
+      plane_vertices, plane_indices, &plane_mesh));
     bake::computeAOWithBlockers( &instances[0], num_instances, &blockers[0], blockers.size(), 
       ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
   } else {
