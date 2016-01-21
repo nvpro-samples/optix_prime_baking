@@ -42,7 +42,6 @@ struct Mesh
   size_t    num_vertices;
   float*    vertices;
   unsigned  vertex_stride_bytes;
-  size_t    num_normals;
   float*    normals;
   unsigned  normal_stride_bytes;
   size_t    num_triangles;

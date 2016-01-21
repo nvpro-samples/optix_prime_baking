@@ -220,7 +220,6 @@ namespace {
     }
 
     plane_mesh->num_vertices  = 4;
-    plane_mesh->num_normals   = 0;
     plane_mesh->num_triangles = 2;
     plane_mesh->vertices      = &plane_vertices[0];
     plane_mesh->vertex_stride_bytes = vertex_stride_bytes;
@@ -363,7 +362,6 @@ int sample_main( int argc, const char** argv )
     tinyobj::mesh_t& mesh = meshes[meshIdx];
     bake::Mesh* bake_mesh = new bake::Mesh;
     bake_mesh->num_vertices  = mesh.positions.size()/3;
-    bake_mesh->num_normals   = mesh.normals.size()/3;
     bake_mesh->num_triangles = mesh.indices.size()/3;
     bake_mesh->vertices      = &mesh.positions[0];
     bake_mesh->vertex_stride_bytes = 0;
