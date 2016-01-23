@@ -404,12 +404,14 @@ void bake::filter_least_squares(
 #include <stdexcept>
 
 void bake::filter_least_squares(
-    const Mesh&,
-    const AOSamples&,
-    const float*,
-    const float,
-    float*            
-    )
+  const Instance*,
+  const size_t,
+  const size_t*,
+  const AOSamples&,
+  const float*,
+  const float,
+  float**
+  )
 {
   throw std::runtime_error( "filter_least_squares called without Eigen3 support");
 }
