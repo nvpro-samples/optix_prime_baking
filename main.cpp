@@ -242,24 +242,25 @@ namespace {
     return instance;
   }
 
-  void make_debug_instances(bake::Mesh* bake_mesh, size_t n, std::vector<bake::Instance>& instances,
+  // TODO: this should operate on entire scene
+  void make_debug_instances(bake::Mesh& bake_mesh, size_t n, std::vector<bake::Instance>& instances,
                             float scene_bbox_min[3], float scene_bbox_max[3])
   {
 
     // Make up a transform per instance
-    const float3 bbox_base = optix::make_float3(0.5f*(bake_mesh->bbox_min[0] + bake_mesh->bbox_max[0]),
-                                                      bake_mesh->bbox_min[1],
-                                                0.5f*(bake_mesh->bbox_min[2] + bake_mesh->bbox_max[2]));
+    const float3 bbox_base = optix::make_float3(0.5f*(bake_mesh.bbox_min[0] + bake_mesh.bbox_max[0]),
+                                                      bake_mesh.bbox_min[1],
+                                                0.5f*(bake_mesh.bbox_min[2] + bake_mesh.bbox_max[2]));
     const float rot = 0.5236f;  // pi/6
     const float3 rot_axis = optix::make_float3(0.0f, 1.0f, 0.0f);
     const float scale_factor = 0.9f;
     float scale = scale_factor;
-    const float3 base_translation = 1.01*optix::make_float3(bake_mesh->bbox_max[0] - bake_mesh->bbox_min[0], 0.0f, 0.0f);
+    const float3 base_translation = 1.01*optix::make_float3(bake_mesh.bbox_max[0] - bake_mesh.bbox_min[0], 0.0f, 0.0f);
     float3 translation = scale_factor* base_translation;
 
     for (size_t i = 0; i < n; i++) {
       bake::Instance instance;
-      instance.mesh = bake_mesh;
+      instance.mesh = &bake_mesh;  // TODO: index
       const optix::Matrix4x4 mat = optix::Matrix4x4::translate(translation) *
                                    optix::Matrix4x4::translate(bbox_base) *
                                    optix::Matrix4x4::rotate((i+1)*rot, rot_axis) *
@@ -268,7 +269,7 @@ namespace {
       scale *= scale_factor;
       translation += scale*base_translation;
 
-      xform_bbox(mat, bake_mesh->bbox_min, bake_mesh->bbox_max, instance.bbox_min, instance.bbox_max);
+      xform_bbox(mat, bake_mesh.bbox_min, bake_mesh.bbox_max, instance.bbox_min, instance.bbox_max);
       expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_min);
       expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_max);
 
@@ -351,6 +352,7 @@ int sample_main( int argc, const char** argv )
   //
   // Populate instances
   //
+  std::vector<bake::Mesh> bake_meshes(meshes.size());
   const size_t num_instances = meshes.size() * config.num_instances_per_mesh;
   std::vector<bake::Instance> instances;
   instances.reserve(num_instances);
@@ -360,32 +362,32 @@ int sample_main( int argc, const char** argv )
   for (size_t meshIdx = 0; meshIdx < meshes.size(); ++meshIdx) {
     
     tinyobj::mesh_t& mesh = meshes[meshIdx];
-    bake::Mesh* bake_mesh = new bake::Mesh;
-    bake_mesh->num_vertices  = mesh.positions.size()/3;
-    bake_mesh->num_triangles = mesh.indices.size()/3;
-    bake_mesh->vertices      = &mesh.positions[0];
-    bake_mesh->vertex_stride_bytes = 0;
-    bake_mesh->normals       = mesh.normals.empty() ? NULL : &mesh.normals[0];
-    bake_mesh->normal_stride_bytes = 0;
-    bake_mesh->tri_vertex_indices = &mesh.indices[0];
+    bake::Mesh& bake_mesh = bake_meshes[meshIdx];
+    bake_mesh.num_vertices  = mesh.positions.size()/3;
+    bake_mesh.num_triangles = mesh.indices.size()/3;
+    bake_mesh.vertices      = &mesh.positions[0];
+    bake_mesh.vertex_stride_bytes = 0;
+    bake_mesh.normals       = mesh.normals.empty() ? NULL : &mesh.normals[0];
+    bake_mesh.normal_stride_bytes = 0;
+    bake_mesh.tri_vertex_indices = &mesh.indices[0];
 
     // Build bbox for mesh
 
-    std::fill(bake_mesh->bbox_min, bake_mesh->bbox_min+3, FLT_MAX);
-    std::fill(bake_mesh->bbox_max, bake_mesh->bbox_max+3, -FLT_MAX);
+    std::fill(bake_mesh.bbox_min, bake_mesh.bbox_min+3, FLT_MAX);
+    std::fill(bake_mesh.bbox_max, bake_mesh.bbox_max+3, -FLT_MAX);
     for (size_t i = 0; i < mesh.positions.size()/3; ++i) {
-      expand_bbox(bake_mesh->bbox_min, bake_mesh->bbox_max, &mesh.positions[3*i]);
+      expand_bbox(bake_mesh.bbox_min, bake_mesh.bbox_max, &mesh.positions[3*i]);
     }
 
     // Make instance
 
     bake::Instance instance;
-    instance.mesh = bake_mesh;  // take ownership
+    instance.mesh = &bake_mesh; // TODO: index, not pointer
     const optix::Matrix4x4 mat = optix::Matrix4x4::identity();  // TODO: use transform from file
     const float* matdata = mat.getData();
     std::copy(matdata, matdata+16, instance.xform);
     
-    xform_bbox(mat, bake_mesh->bbox_min, bake_mesh->bbox_max, instance.bbox_min, instance.bbox_max);
+    xform_bbox(mat, bake_mesh.bbox_min, bake_mesh.bbox_max, instance.bbox_min, instance.bbox_max);
     expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_min);
     expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_max);
 
@@ -474,14 +476,7 @@ int sample_main( int argc, const char** argv )
   std::cerr << "Launch viewer  ... \n" << std::endl;
   bake::view( &instances[0], instances.size(), vertex_ao, scene_bbox_min, scene_bbox_max );
 
-  // Clean up instances, being careful not to double delete
-  std::set<bake::Mesh*> freed_meshes;
   for (size_t i = 0; i < instances.size(); ++i) {
-    if (freed_meshes.find(instances[i].mesh) == freed_meshes.end()) {
-      freed_meshes.insert(instances[i].mesh);
-      delete instances[i].mesh; 
-      instances[i].mesh = NULL;
-    }
     delete [] vertex_ao[i];
   }
   delete [] vertex_ao;
