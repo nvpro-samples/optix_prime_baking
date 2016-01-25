@@ -93,6 +93,8 @@ void bake::sampleInstances(
 }
 
 void bake::mapAOToVertices(
+    const Mesh*             meshes,
+    const size_t            num_meshes,
     const Instance*         instances,
     const size_t            num_instances,
     const size_t*           num_samples_per_instance,
@@ -104,9 +106,9 @@ void bake::mapAOToVertices(
     )
 {
     if (mode == VERTEX_FILTER_AREA_BASED) {
-      bake::filter( instances, num_instances, num_samples_per_instance, ao_samples, ao_values, vertex_ao ); 
+      bake::filter( meshes, num_meshes, instances, num_instances, num_samples_per_instance, ao_samples, ao_values, vertex_ao ); 
     } else if (mode == VERTEX_FILTER_LEAST_SQUARES) {
-      bake::filter_least_squares( instances, num_instances, num_samples_per_instance, ao_samples, ao_values, regularization_weight, vertex_ao ); 
+      bake::filter_least_squares( meshes, num_meshes, instances, num_instances, num_samples_per_instance, ao_samples, ao_values, regularization_weight, vertex_ao ); 
     } else {
       assert(0 && "invalid vertex filter mode");
     }

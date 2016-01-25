@@ -184,9 +184,9 @@ namespace {
     }
   }
 
-  bake::Instance make_ground_plane(float scene_bbox_min[3], float scene_bbox_max[3], unsigned scene_vertex_stride_bytes,
-                                   std::vector<float>& plane_vertices, std::vector<unsigned int>& plane_indices,
-                                   bake::Mesh* plane_mesh)
+  void make_ground_plane(float scene_bbox_min[3], float scene_bbox_max[3], unsigned scene_vertex_stride_bytes,
+                         std::vector<float>& plane_vertices, std::vector<unsigned int>& plane_indices,
+                         std::vector<bake::Mesh>& meshes, std::vector<bake::Instance>& instances)
   {
 
     const unsigned int index_data[] = {0, 1, 2, 0, 2, 3};
@@ -218,17 +218,19 @@ namespace {
       plane_vertices[num_floats_per_vert*i+1] = vertex_data[3*i+1];
       plane_vertices[num_floats_per_vert*i+2] = vertex_data[3*i+2];
     }
-
-    plane_mesh->num_vertices  = 4;
-    plane_mesh->num_triangles = 2;
-    plane_mesh->vertices      = &plane_vertices[0];
-    plane_mesh->vertex_stride_bytes = vertex_stride_bytes;
-    plane_mesh->normals       = NULL;
-    plane_mesh->normal_stride_bytes = 0;
-    plane_mesh->tri_vertex_indices = &plane_indices[0];
+    
+    bake::Mesh plane_mesh;
+    plane_mesh.num_vertices  = 4;
+    plane_mesh.num_triangles = 2;
+    plane_mesh.vertices      = &plane_vertices[0];
+    plane_mesh.vertex_stride_bytes = vertex_stride_bytes;
+    plane_mesh.normals       = NULL;
+    plane_mesh.normal_stride_bytes = 0;
+    plane_mesh.tri_vertex_indices = &plane_indices[0];
     
     bake::Instance instance;
-    instance.mesh = plane_mesh;
+    instance.mesh_index = meshes.size();
+    instance.mesh = &plane_mesh;
 
     const optix::Matrix4x4 mat = optix::Matrix4x4::identity();
     const float* matdata = mat.getData();
@@ -239,11 +241,13 @@ namespace {
       instance.bbox_max[k] = ground_max[k];
     }
 
-    return instance;
+    meshes.push_back(plane_mesh);
+    instances.push_back(instance);
+
   }
 
   // TODO: this should operate on entire scene
-  void make_debug_instances(bake::Mesh& bake_mesh, size_t n, std::vector<bake::Instance>& instances,
+  void make_debug_instances(bake::Mesh& bake_mesh, unsigned mesh_index, size_t n, std::vector<bake::Instance>& instances,
                             float scene_bbox_min[3], float scene_bbox_max[3])
   {
 
@@ -260,7 +264,8 @@ namespace {
 
     for (size_t i = 0; i < n; i++) {
       bake::Instance instance;
-      instance.mesh = &bake_mesh;  // TODO: index
+      instance.mesh_index = mesh_index;
+      instance.mesh = &bake_mesh;  // TODO: remove
       const optix::Matrix4x4 mat = optix::Matrix4x4::translate(translation) *
                                    optix::Matrix4x4::translate(bbox_base) *
                                    optix::Matrix4x4::rotate((i+1)*rot, rot_axis) *
@@ -382,6 +387,7 @@ int sample_main( int argc, const char** argv )
     // Make instance
 
     bake::Instance instance;
+    instance.mesh_index = meshIdx;
     instance.mesh = &bake_mesh; // TODO: index, not pointer
     const optix::Matrix4x4 mat = optix::Matrix4x4::identity();  // TODO: use transform from file
     const float* matdata = mat.getData();
@@ -394,7 +400,7 @@ int sample_main( int argc, const char** argv )
     instances.push_back(instance);
 
     if (config.num_instances_per_mesh > 1) {
-      make_debug_instances(bake_mesh, config.num_instances_per_mesh-1, instances, scene_bbox_min, scene_bbox_max);
+      make_debug_instances(bake_mesh, meshIdx, config.num_instances_per_mesh-1, instances, scene_bbox_min, scene_bbox_max);
     }
     
   }
@@ -445,13 +451,13 @@ int sample_main( int argc, const char** argv )
 
   if (config.use_ground_plane_blocker) {
     // Add blocker for ground plane (no surface samples)
-    std::vector<bake::Instance> blockers;
+    std::vector<bake::Mesh> blocker_meshes;
+    std::vector<bake::Instance> blocker_instances;
     std::vector<float> plane_vertices;
     std::vector<unsigned int> plane_indices;
-    bake::Mesh plane_mesh;
-    blockers.push_back(make_ground_plane(scene_bbox_min, scene_bbox_max, instances[0].mesh->vertex_stride_bytes, 
-      plane_vertices, plane_indices, &plane_mesh));
-    bake::computeAOWithBlockers( &instances[0], num_instances, &blockers[0], blockers.size(), 
+    make_ground_plane(scene_bbox_min, scene_bbox_max, instances[0].mesh->vertex_stride_bytes, 
+      plane_vertices, plane_indices, blocker_meshes, blocker_instances);
+    bake::computeAOWithBlockers( &instances[0], num_instances, &blocker_instances[0], blocker_instances.size(), 
       ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
   } else {
     bake::computeAO( &instances[0], num_instances, ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
@@ -466,7 +472,7 @@ int sample_main( int argc, const char** argv )
   for (size_t i = 0; i < num_instances; ++i ) {
     vertex_ao[i] = new float[ instances[i].mesh->num_vertices ];
   }
-  bake::mapAOToVertices( &instances[0], num_instances, &num_samples_per_instance[0], ao_samples, &ao_values[0], config.filter_mode, config.regularization_weight, vertex_ao );
+  bake::mapAOToVertices( &bake_meshes[0], bake_meshes.size(), &instances[0], num_instances, &num_samples_per_instance[0], ao_samples, &ao_values[0], config.filter_mode, config.regularization_weight, vertex_ao );
 
   printTimeElapsed( timer ); 
 

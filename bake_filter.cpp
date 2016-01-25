@@ -74,6 +74,8 @@ void filter_mesh_area_weighted(
 }  // namespace
 
 void bake::filter(
+    const Mesh*          meshes,
+    const size_t         num_meshes,
     const Instance*      instances,
     const size_t         num_instances,
     const size_t*        num_samples_per_instance,
@@ -94,7 +96,7 @@ void bake::filter(
 
     const float* instance_ao_values = ao_values + sample_offset;
 
-    filter_mesh_area_weighted(*instances[i].mesh, instance_ao_samples, instance_ao_values, vertex_ao[i]);
+    filter_mesh_area_weighted(meshes[instances[i].mesh_index], instance_ao_samples, instance_ao_values, vertex_ao[i]);
 
     sample_offset += num_samples_per_instance[i];
   }

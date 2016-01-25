@@ -26,6 +26,8 @@ namespace bake
 {
 
   void filter(
+      const Mesh*          meshes,
+      const size_t         num_meshes,
       const Instance*      instances,
       const size_t         num_instances,
       const size_t*        num_samples_per_instance,

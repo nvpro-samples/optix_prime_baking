@@ -235,16 +235,30 @@ void edgeBasedRegularizer(const float* verts, size_t num_verts, unsigned vertex_
 }
 
 
+void build_regularization_matrix(
+    const bake::Mesh& mesh,
+    SparseMatrix& regularization_matrix,
+    Timer& timer
+  )
+{
+
+  timer.start();
+  const int3* tri_vertex_indices  = reinterpret_cast<int3*>( mesh.tri_vertex_indices );
+  edgeBasedRegularizer(mesh.vertices, mesh.num_vertices, mesh.vertex_stride_bytes, tri_vertex_indices, mesh.num_triangles, regularization_matrix);
+  timer.stop();
+}
+
+
 void filter_mesh_least_squares(
     const bake::Mesh&       mesh,
     const bake::AOSamples&  ao_samples,
-    const float*      ao_values,
-    const float       regularization_weight,
-    float*            vertex_ao,
-    Timer&            mass_matrix_timer,
-    Timer&            regularization_matrix_timer,
-    Timer&            decompose_timer,
-    Timer&            solve_timer
+    const float*            ao_values,
+    const float             regularization_weight,
+    const SparseMatrix&     regularization_matrix,
+    float*                  vertex_ao,
+    Timer&                  mass_matrix_timer,
+    Timer&                  decompose_timer,
+    Timer&                  solve_timer
     )
 {
   std::fill(vertex_ao, vertex_ao + mesh.num_vertices, 0.0f);
@@ -314,11 +328,6 @@ void filter_mesh_least_squares(
   // Optional edge-based regularization for smoother result, see paper for details
   if (regularization_weight > 0.0f) {
 
-    regularization_matrix_timer.start();
-    SparseMatrix regularization_matrix;
-    edgeBasedRegularizer(mesh.vertices, mesh.num_vertices, mesh.vertex_stride_bytes, tri_vertex_indices, mesh.num_triangles, regularization_matrix);
-    regularization_matrix_timer.stop();
-
     decompose_timer.start();
     SparseMatrix A = mass_matrix + regularization_weight*regularization_matrix;
     solver.compute(A);
@@ -358,6 +367,8 @@ void filter_mesh_least_squares(
 
 
 void bake::filter_least_squares(
+    const Mesh*         meshes,
+    const size_t        num_meshes,
     const Instance*     instances,
     const size_t        num_instances,
     const size_t*       num_samples_per_instance,
@@ -373,22 +384,34 @@ void bake::filter_least_squares(
   Timer decompose_timer;
   Timer solve_timer;
 
-  size_t sample_offset = 0;
-  for (size_t i = 0; i < num_instances; ++i) {
-    // Point to samples for this instance
-    AOSamples instance_ao_samples;
-    instance_ao_samples.num_samples = num_samples_per_instance[i];
-    instance_ao_samples.sample_positions = ao_samples.sample_positions + 3*sample_offset;
-    instance_ao_samples.sample_normals = ao_samples.sample_normals + 3*sample_offset;
-    instance_ao_samples.sample_face_normals = ao_samples.sample_face_normals + 3*sample_offset;
-    instance_ao_samples.sample_infos = ao_samples.sample_infos + sample_offset;
+  for (size_t meshIdx = 0; meshIdx < num_meshes; meshIdx++) {
 
-    const float* instance_ao_values = ao_values + sample_offset;
+    // Build reg. matrix once, it does not depend on rigid xform per instance
+    SparseMatrix regularization_matrix;
+    if (regularization_weight > 0.0f) {
+      build_regularization_matrix(meshes[meshIdx], regularization_matrix, regularization_matrix_timer);
+    }
 
-    filter_mesh_least_squares(*instances[i].mesh, instance_ao_samples, instance_ao_values, regularization_weight, vertex_ao[i],
-      mass_matrix_timer, regularization_matrix_timer, decompose_timer, solve_timer);
+    // Filter all the instances that point to this mesh
+    size_t sample_offset = 0;
+    for (size_t i = 0; i < num_instances; ++i) {
+      if (instances[i].mesh_index == meshIdx) {
+        // Point to samples for this instance
+        AOSamples instance_ao_samples;
+        instance_ao_samples.num_samples = num_samples_per_instance[i];
+        instance_ao_samples.sample_positions = ao_samples.sample_positions + 3*sample_offset;
+        instance_ao_samples.sample_normals = ao_samples.sample_normals + 3*sample_offset;
+        instance_ao_samples.sample_face_normals = ao_samples.sample_face_normals + 3*sample_offset;
+        instance_ao_samples.sample_infos = ao_samples.sample_infos + sample_offset;
 
-    sample_offset += num_samples_per_instance[i];
+        const float* instance_ao_values = ao_values + sample_offset;
+
+        filter_mesh_least_squares(meshes[meshIdx], instance_ao_samples, instance_ao_values, regularization_weight, regularization_matrix,
+          vertex_ao[i], mass_matrix_timer, decompose_timer, solve_timer);
+      }
+
+      sample_offset += num_samples_per_instance[i];
+    }
   }
 
   std::cerr << "\n\tbuild mass matrices ...           ";  printTimeElapsed( mass_matrix_timer );
@@ -404,6 +427,8 @@ void bake::filter_least_squares(
 #include <stdexcept>
 
 void bake::filter_least_squares(
+  const Mesh*,
+  const size_t,
   const Instance*,
   const size_t,
   const size_t*,

@@ -54,6 +54,7 @@ struct Instance
 {
   float xform[16];  // 4x4 row major
   Mesh *mesh;
+  unsigned mesh_index;
   float bbox_min[3];
   float bbox_max[3];
 };
@@ -120,6 +121,8 @@ void computeAOWithBlockers(
     );
 
 void mapAOToVertices(
+    const Mesh*             meshes,
+    const size_t            num_meshes,
     const Instance*         instances,
     const size_t            num_instances,
     const size_t*           num_samples_per_instance,
