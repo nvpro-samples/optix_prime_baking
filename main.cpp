@@ -457,10 +457,11 @@ int sample_main( int argc, const char** argv )
     std::vector<unsigned int> plane_indices;
     make_ground_plane(scene_bbox_min, scene_bbox_max, instances[0].mesh->vertex_stride_bytes, 
       plane_vertices, plane_indices, blocker_meshes, blocker_instances);
-    bake::computeAOWithBlockers( &instances[0], num_instances, &blocker_instances[0], blocker_instances.size(), 
+    bake::computeAOWithBlockers( &bake_meshes[0], bake_meshes.size(), &instances[0], num_instances, 
+      &blocker_meshes[0], blocker_meshes.size(), &blocker_instances[0], blocker_instances.size(), 
       ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
   } else {
-    bake::computeAO( &instances[0], num_instances, ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
+    bake::computeAO( &bake_meshes[0], bake_meshes.size(), &instances[0], num_instances, ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
   }
   printTimeElapsed( timer ); 
 

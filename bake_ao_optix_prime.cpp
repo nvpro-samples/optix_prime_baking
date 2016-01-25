@@ -34,7 +34,6 @@
 #include <algorithm>
 #include <float.h>
 #include <iostream>
-#include <map>
 
 using namespace optix::prime;
 
@@ -48,30 +47,28 @@ do {                              \
 namespace
 {
 
-void createInstances( Context& context, const bake::Instance* instances, const size_t num_instances, 
+void createInstances( Context& context,
+    const bake::Mesh* meshes, const size_t num_meshes, const bake::Instance* instances, const size_t num_instances, 
     std::vector<Model>& models, std::vector<RTPmodel>& prime_instances, std::vector<optix::Matrix4x4>& transforms )
 {
-  std::map<bake::Mesh*, RTPmodel> unique_meshes;
 
+  const size_t model_offset = models.size();
+  models.reserve(models.size() + num_meshes);
+  for (size_t meshIdx = 0; meshIdx < num_meshes; ++meshIdx) {
+    Model model = context->createModel();
+    const bake::Mesh& mesh = meshes[meshIdx];
+    model->setTriangles(
+        mesh.num_triangles, RTP_BUFFER_TYPE_HOST, mesh.tri_vertex_indices,
+        mesh.num_vertices,  RTP_BUFFER_TYPE_HOST, mesh.vertices, mesh.vertex_stride_bytes
+        );
+    model->update( 0 );
+    models.push_back(model);  // Model is ref counted, so need to return it to prevent destruction
+  }
+
+  prime_instances.reserve(prime_instances.size() + num_instances);
   for (int i = 0; i < num_instances; ++i) {
-    RTPmodel rtp_model(0);
-    // Share mesh between instances if possible
-    if (unique_meshes.find(instances[i].mesh) != unique_meshes.end()) {
-      rtp_model = unique_meshes.find(instances[i].mesh)->second;
-    } else {
-      // Allocate new model
-      Model model = context->createModel();
-      const bake::Mesh& mesh = *instances[i].mesh;
-      model->setTriangles(
-          mesh.num_triangles, RTP_BUFFER_TYPE_HOST, mesh.tri_vertex_indices,
-          mesh.num_vertices,  RTP_BUFFER_TYPE_HOST, mesh.vertices, mesh.vertex_stride_bytes
-          );
-      model->update( 0 );
-      models.push_back(model);  // Model is ref counted, so need to return it to prevent destruction
-      rtp_model = model->getRTPmodel();
-      unique_meshes.insert(std::make_pair(instances[i].mesh, rtp_model));
-    }
-
+    const size_t index = model_offset + instances[i].mesh_index;
+    RTPmodel rtp_model = models[index]->getRTPmodel();
     prime_instances.push_back(rtp_model);
     transforms.push_back(optix::Matrix4x4(instances[i].xform));
   }
@@ -88,10 +85,14 @@ inline size_t idivCeil( size_t x, size_t y )
 
 
 void bake::ao_optix_prime(
+    const bake::Mesh* meshes,
+    const size_t num_meshes,
     const bake::Instance* instances,
     const size_t num_instances,
-    const bake::Instance* blockers,
-    const size_t num_blockers,
+    const bake::Mesh* blocker_meshes,
+    const size_t num_blocker_meshes,
+    const bake::Instance* blocker_instances,
+    const size_t num_blocker_instances,
     const bake::AOSamples& ao_samples,
     const int rays_per_sample,
     const float* bbox_min,
@@ -108,9 +109,9 @@ void bake::ao_optix_prime(
   std::vector<Model> models;
   std::vector<RTPmodel> prime_instances;
   std::vector<optix::Matrix4x4> transforms;
-  createInstances( ctx, instances, num_instances, models, prime_instances, transforms );
-  if (num_blockers > 0) {
-    createInstances( ctx, blockers, num_blockers, models, prime_instances, transforms ); 
+  createInstances( ctx, meshes, num_meshes, instances, num_instances, models, prime_instances, transforms );
+  if (num_blocker_instances > 0) {
+    createInstances( ctx, blocker_meshes, num_blocker_meshes, blocker_instances, num_blocker_instances, models, prime_instances, transforms ); 
   }
   Model scene = ctx->createModel();
   scene->setInstances( prime_instances.size(), RTP_BUFFER_TYPE_HOST, &prime_instances[0],

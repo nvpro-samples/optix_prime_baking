@@ -96,6 +96,8 @@ void sampleInstances(
 
 
 void computeAO( 
+    const Mesh*      meshes,
+    const size_t     num_meshes,
     const Instance*  instances,
     const size_t     num_instances,
     const AOSamples& ao_samples,
@@ -109,10 +111,14 @@ void computeAO(
 // This version takes extra "blocker" objects that occlude rays,
 // but do not have any AO samples of their own.
 void computeAOWithBlockers(
+    const Mesh*      meshes,
+    const size_t     num_meshes,
     const Instance*  instances,
     const size_t     num_instances,
-    const Instance*  blockers,
-    const size_t     num_blockers,
+    const Mesh*      blocker_meshes,
+    const size_t     num_blocker_meshes,
+    const Instance*  blocker_instances,
+    const size_t     num_blocker_instances,
     const AOSamples& ao_samples,
     const int        rays_per_sample,
     const float*     bbox_min,
