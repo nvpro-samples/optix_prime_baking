@@ -26,14 +26,8 @@ namespace bake
 {
 
 void ao_optix_prime(
-    const Mesh*     meshes,
-    const size_t    num_meshes,
-    const Instance* instances,
-    const size_t    num_instances,
-    const Mesh*     blocker_meshes,
-    const size_t    num_blocker_meshes,
-    const Instance* blocker_instances,
-    const size_t    num_blocker_instances,
+    const Scene&    scene,
+    const Scene&    blockers,
     const AOSamples& ao_samples,
     const int rays_per_sample,
     const float* bbox_min,

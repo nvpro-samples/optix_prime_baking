@@ -117,14 +117,8 @@ inline size_t idivCeil( size_t x, size_t y )
 
 
 void bake::ao_optix_prime(
-    const bake::Mesh* meshes,
-    const size_t num_meshes,
-    const bake::Instance* instances,
-    const size_t num_instances,
-    const bake::Mesh* blocker_meshes,
-    const size_t num_blocker_meshes,
-    const bake::Instance* blocker_instances,
-    const size_t num_blocker_instances,
+    const Scene& scene,
+    const Scene& blockers,
     const bake::AOSamples& ao_samples,
     const int rays_per_sample,
     const float* bbox_min,
@@ -143,18 +137,18 @@ void bake::ao_optix_prime(
   std::vector<optix::Matrix4x4> transforms;
   std::vector< Buffer<float3>* > allocated_vertex_buffers;
   std::vector< Buffer<int3>* > allocated_index_buffers;
-  createInstances( ctx, meshes, num_meshes, instances, num_instances, 
+  createInstances( ctx, scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, 
     allocated_vertex_buffers, allocated_index_buffers, models, prime_instances, transforms );
-  if (num_blocker_instances > 0) {
-    createInstances( ctx, blocker_meshes, num_blocker_meshes, blocker_instances, num_blocker_instances, 
+  if (blockers.num_instances > 0) {
+    createInstances( ctx, blockers.meshes, blockers.num_meshes, blockers.instances, blockers.num_instances, 
       allocated_vertex_buffers, allocated_index_buffers, models, prime_instances, transforms ); 
   }
-  Model scene = ctx->createModel();
-  scene->setInstances( prime_instances.size(), RTP_BUFFER_TYPE_HOST, &prime_instances[0],
+  Model scene_model = ctx->createModel();
+  scene_model->setInstances( prime_instances.size(), RTP_BUFFER_TYPE_HOST, &prime_instances[0],
                       RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );
-  scene->update( 0 );
+  scene_model->update( 0 );
 
-  Query   query = scene->createQuery( RTP_QUERY_TYPE_ANY );
+  Query   query = scene_model->createQuery( RTP_QUERY_TYPE_ANY );
 
   const int sqrt_rays_per_sample = static_cast<int>( sqrtf( static_cast<float>( rays_per_sample ) ) + .5f );
   setup_timer.stop();

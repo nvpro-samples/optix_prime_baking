@@ -367,10 +367,7 @@ void filter_mesh_least_squares(
 
 
 void bake::filter_least_squares(
-    const Mesh*         meshes,
-    const size_t        num_meshes,
-    const Instance*     instances,
-    const size_t        num_instances,
+    const Scene&        scene,
     const size_t*       num_samples_per_instance,
     const AOSamples&    ao_samples,
     const float*        ao_values,
@@ -384,18 +381,18 @@ void bake::filter_least_squares(
   Timer decompose_timer;
   Timer solve_timer;
 
-  for (size_t meshIdx = 0; meshIdx < num_meshes; meshIdx++) {
+  for (size_t meshIdx = 0; meshIdx < scene.num_meshes; meshIdx++) {
 
     // Build reg. matrix once, it does not depend on rigid xform per instance
     SparseMatrix regularization_matrix;
     if (regularization_weight > 0.0f) {
-      build_regularization_matrix(meshes[meshIdx], regularization_matrix, regularization_matrix_timer);
+      build_regularization_matrix(scene.meshes[meshIdx], regularization_matrix, regularization_matrix_timer);
     }
 
     // Filter all the instances that point to this mesh
     size_t sample_offset = 0;
-    for (size_t i = 0; i < num_instances; ++i) {
-      if (instances[i].mesh_index == meshIdx) {
+    for (size_t i = 0; i < scene.num_instances; ++i) {
+      if (scene.instances[i].mesh_index == meshIdx) {
         // Point to samples for this instance
         AOSamples instance_ao_samples;
         instance_ao_samples.num_samples = num_samples_per_instance[i];
@@ -406,7 +403,7 @@ void bake::filter_least_squares(
 
         const float* instance_ao_values = ao_values + sample_offset;
 
-        filter_mesh_least_squares(meshes[meshIdx], instance_ao_samples, instance_ao_values, regularization_weight, regularization_matrix,
+        filter_mesh_least_squares(scene.meshes[meshIdx], instance_ao_samples, instance_ao_values, regularization_weight, regularization_matrix,
           vertex_ao[i], mass_matrix_timer, decompose_timer, solve_timer);
       }
 
@@ -427,10 +424,7 @@ void bake::filter_least_squares(
 #include <stdexcept>
 
 void bake::filter_least_squares(
-  const Mesh*,
-  const size_t,
-  const Instance*,
-  const size_t,
+  const Scene&,
   const size_t*,
   const AOSamples&,
   const float*,

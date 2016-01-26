@@ -233,17 +233,14 @@ void sample_instance(
 
 
 void bake::sample_instances(
-    const Mesh* meshes,
-    const size_t num_meshes,
-    const Instance* instances,
-    const size_t num_instances,
+    const Scene& scene,
     const size_t* num_samples_per_instance,
     const size_t min_samples_per_triangle,
     bake::AOSamples&  ao_samples
     )
 {
   size_t sample_offset = 0;
-  for (size_t i = 0; i < num_instances; ++i) {
+  for (size_t i = 0; i < scene.num_instances; ++i) {
     // Point to samples for this instance
     AOSamples instance_ao_samples;
     instance_ao_samples.num_samples = num_samples_per_instance[i];
@@ -252,8 +249,8 @@ void bake::sample_instances(
     instance_ao_samples.sample_face_normals = ao_samples.sample_face_normals + 3*sample_offset;
     instance_ao_samples.sample_infos = ao_samples.sample_infos + sample_offset;
 
-    optix::Matrix4x4 xform(instances[i].xform);
-    sample_instance(meshes[instances[i].mesh_index], xform, (unsigned int)i, min_samples_per_triangle, instance_ao_samples);
+    optix::Matrix4x4 xform(scene.instances[i].xform);
+    sample_instance(scene.meshes[scene.instances[i].mesh_index], xform, (unsigned int)i, min_samples_per_triangle, instance_ao_samples);
 
     sample_offset += num_samples_per_instance[i];
   }
@@ -283,10 +280,7 @@ private:
 
 
 size_t bake::distribute_samples(
-    const bake::Mesh* meshes,
-    const size_t num_meshes,
-    const bake::Instance* instances,
-    const size_t num_instances,
+    const Scene& scene,
     const size_t min_samples_per_triangle,
     const size_t requested_num_samples,
     size_t* num_samples_per_instance
@@ -294,10 +288,10 @@ size_t bake::distribute_samples(
 {
 
   // Compute min samples per instance
-  std::vector<unsigned int> min_samples_per_instance(num_instances);
+  std::vector<unsigned int> min_samples_per_instance(scene.num_instances);
   size_t num_triangles = 0;
-  for (size_t i = 0; i < num_instances; ++i) {
-    const bake::Mesh& mesh = meshes[instances[i].mesh_index];
+  for (size_t i = 0; i < scene.num_instances; ++i) {
+    const bake::Mesh& mesh = scene.meshes[scene.instances[i].mesh_index];
     min_samples_per_instance[i] = (unsigned int)(min_samples_per_triangle * mesh.num_triangles); 
     num_triangles += mesh.num_triangles;
   }
@@ -306,12 +300,12 @@ size_t bake::distribute_samples(
 
   // Compute surface area per instance.
   // Note: for many xforms, we could compute surface area per mesh instead of per instance.
-  std::vector<double> area_per_instance(num_instances, 0.0);
+  std::vector<double> area_per_instance(scene.num_instances, 0.0);
   if (num_samples > min_num_samples) {
 
-    for (size_t idx = 0; idx < num_instances; ++idx) {
-      const bake::Mesh& mesh = meshes[instances[idx].mesh_index];
-      const optix::Matrix4x4 xform(instances[idx].xform);
+    for (size_t idx = 0; idx < scene.num_instances; ++idx) {
+      const bake::Mesh& mesh = scene.meshes[scene.instances[idx].mesh_index];
+      const optix::Matrix4x4 xform(scene.instances[idx].xform);
       const int3* tri_vertex_indices  = reinterpret_cast<int3*>( mesh.tri_vertex_indices );
       const unsigned vertex_stride_bytes = mesh.vertex_stride_bytes > 0 ? mesh.vertex_stride_bytes : 3*sizeof(float);
       for (size_t tri_idx = 0; tri_idx < mesh.num_triangles; ++tri_idx) {
@@ -328,7 +322,7 @@ size_t bake::distribute_samples(
 
   // Distribute samples
   InstanceSamplerCallback cb(&min_samples_per_instance[0], &area_per_instance[0]);
-  distribute_samples_generic(cb, num_samples, num_instances, num_samples_per_instance);
+  distribute_samples_generic(cb, num_samples, scene.num_instances, num_samples_per_instance);
 
   return num_samples;
 

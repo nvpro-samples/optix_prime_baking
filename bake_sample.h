@@ -26,14 +26,12 @@ namespace bake
 {
 
 size_t distribute_samples( 
-  const Mesh* meshes, const size_t num_meshes,
-  const Instance* instances, const size_t num_instances, 
+  const Scene& scene,
   const size_t min_samples_per_triangle, 
   const size_t requested_num_samples, size_t* num_samples_per_instance );
 
 void sample_instances(
-  const Mesh* meshes, const size_t num_meshes,
-  const Instance* instances, const size_t num_instances, 
+  const Scene& scene,
   const size_t* num_samples_per_instance, 
   const size_t min_samples_per_triangle, AOSamples& ao_samples);
 

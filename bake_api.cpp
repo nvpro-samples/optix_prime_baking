@@ -33,10 +33,7 @@ using namespace optix;
 
 
 void bake::computeAO( 
-    const Mesh*       meshes,
-    const size_t      num_meshes,
-    const Instance*   instances,
-    const size_t      num_instances,
+    const Scene&      scene,
     const AOSamples&  ao_samples,
     const int         rays_per_sample,
     const float*      bbox_min,
@@ -44,22 +41,15 @@ void bake::computeAO(
     float*            ao_values 
     )
 {
-
-  bake::ao_optix_prime( meshes, num_meshes, instances, num_instances, 
-                        /*blockers*/ NULL, 0, NULL, 0,
+  Scene blockers = {0};
+  bake::ao_optix_prime( scene, blockers,
                         ao_samples, rays_per_sample, bbox_min, bbox_max, ao_values );
 
 }
 
 void bake::computeAOWithBlockers(
-    const Mesh*       meshes,
-    const size_t      num_meshes,
-    const Instance*   instances,
-    const size_t      num_instances,
-    const Mesh*       blocker_meshes,
-    const size_t      num_blocker_meshes,
-    const Instance*   blocker_instances,
-    const size_t      num_blocker_instances,
+    const Scene&      scene,
+    const Scene&      blockers,
     const AOSamples&  ao_samples,
     const int         rays_per_sample,
     const float*      bbox_min,
@@ -68,48 +58,39 @@ void bake::computeAOWithBlockers(
     )
 {
 
-  bake::ao_optix_prime( meshes, num_meshes, instances, num_instances, blocker_meshes, num_blocker_meshes, blocker_instances, num_blocker_instances, 
+  bake::ao_optix_prime( scene, blockers,
                         ao_samples, rays_per_sample, bbox_min, bbox_max, ao_values );
 
 }
 
 
 size_t bake::distributeSamples(
-    const Mesh*     meshes,
-    const size_t    num_meshes,
-    const Instance* instances,
-    const size_t    num_instances,
+    const Scene&    scene,
     const size_t    min_samples_per_triangle,
     const size_t    requested_num_samples,
     size_t*         num_samples_per_instance
     )
 {
 
-  return bake::distribute_samples( meshes, num_meshes, instances, num_instances, min_samples_per_triangle, requested_num_samples, num_samples_per_instance );
+  return bake::distribute_samples( scene, min_samples_per_triangle, requested_num_samples, num_samples_per_instance );
 
 }
 
 
 void bake::sampleInstances(
-    const Mesh*     meshes,
-    const size_t    num_meshes,
-    const Instance* instances,
-    const size_t    num_instances,
-    const size_t*   num_samples_per_instance,
-    const size_t    min_samples_per_triangle,
-    AOSamples&      ao_samples
+    const Scene&  scene,
+    const size_t* num_samples_per_instance,
+    const size_t  min_samples_per_triangle,
+    AOSamples&    ao_samples
     )
 {
 
-  bake::sample_instances( meshes, num_meshes, instances, num_instances, num_samples_per_instance, min_samples_per_triangle, ao_samples );
+  bake::sample_instances( scene, num_samples_per_instance, min_samples_per_triangle, ao_samples );
 
 }
 
 void bake::mapAOToVertices(
-    const Mesh*             meshes,
-    const size_t            num_meshes,
-    const Instance*         instances,
-    const size_t            num_instances,
+    const Scene&            scene,
     const size_t*           num_samples_per_instance,
     const AOSamples&        ao_samples,
     const float*            ao_values,
@@ -119,9 +100,9 @@ void bake::mapAOToVertices(
     )
 {
     if (mode == VERTEX_FILTER_AREA_BASED) {
-      bake::filter( meshes, num_meshes, instances, num_instances, num_samples_per_instance, ao_samples, ao_values, vertex_ao ); 
+      bake::filter( scene, num_samples_per_instance, ao_samples, ao_values, vertex_ao ); 
     } else if (mode == VERTEX_FILTER_LEAST_SQUARES) {
-      bake::filter_least_squares( meshes, num_meshes, instances, num_instances, num_samples_per_instance, ao_samples, ao_values, regularization_weight, vertex_ao ); 
+      bake::filter_least_squares( scene, num_samples_per_instance, ao_samples, ao_values, regularization_weight, vertex_ao ); 
     } else {
       assert(0 && "invalid vertex filter mode");
     }

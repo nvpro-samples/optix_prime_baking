@@ -25,10 +25,7 @@
 namespace bake {
 
 void filter_least_squares(
-    const Mesh*         meshes,
-    const size_t        num_meshes,
-    const Instance*     instances,
-    const size_t        num_instances,
+    const Scene&        scene,
     const size_t*       num_samples_per_instance,
     const AOSamples&    ao_samples,
     const float*        ao_values,

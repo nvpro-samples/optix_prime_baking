@@ -422,14 +422,19 @@ int sample_main( int argc, const char** argv )
   timer.reset();
   timer.start();
 
+  bake::Scene scene;
+  scene.meshes = &bake_meshes[0];
+  scene.num_meshes = bake_meshes.size();
+  scene.instances = &instances[0];
+  scene.num_instances = instances.size();
+
   std::vector<size_t> num_samples_per_instance(num_instances);
-  const size_t total_samples = bake::distributeSamples( &bake_meshes[0], bake_meshes.size(), &instances[0], instances.size(),
-    config.min_samples_per_face, config.num_samples, &num_samples_per_instance[0]);
+  const size_t total_samples = bake::distributeSamples( scene, config.min_samples_per_face, config.num_samples, &num_samples_per_instance[0] );
 
   bake::AOSamples ao_samples;
   allocate_ao_samples( ao_samples, total_samples );
 
-  bake::sampleInstances( &bake_meshes[0], bake_meshes.size(), &instances[0], num_instances, &num_samples_per_instance[0], config.min_samples_per_face, ao_samples );
+  bake::sampleInstances( scene, &num_samples_per_instance[0], config.min_samples_per_face, ao_samples );
   
   printTimeElapsed( timer ); 
 
@@ -454,11 +459,11 @@ int sample_main( int argc, const char** argv )
     std::vector<unsigned int> plane_indices;
     make_ground_plane(scene_bbox_min, scene_bbox_max, bake_meshes[0].vertex_stride_bytes, 
       plane_vertices, plane_indices, blocker_meshes, blocker_instances);
-    bake::computeAOWithBlockers( &bake_meshes[0], bake_meshes.size(), &instances[0], num_instances, 
-      &blocker_meshes[0], blocker_meshes.size(), &blocker_instances[0], blocker_instances.size(), 
+    bake::Scene blockers = { &blocker_meshes[0], blocker_meshes.size(), &blocker_instances[0], blocker_instances.size() };
+    bake::computeAOWithBlockers(scene, blockers,
       ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
   } else {
-    bake::computeAO( &bake_meshes[0], bake_meshes.size(), &instances[0], num_instances, ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
+    bake::computeAO( scene, ao_samples, config.num_rays, scene_bbox_min, scene_bbox_max, &ao_values[0] );
   }
   printTimeElapsed( timer ); 
 
@@ -470,7 +475,7 @@ int sample_main( int argc, const char** argv )
   for (size_t i = 0; i < num_instances; ++i ) {
     vertex_ao[i] = new float[ bake_meshes[instances[i].mesh_index].num_vertices ];
   }
-  bake::mapAOToVertices( &bake_meshes[0], bake_meshes.size(), &instances[0], num_instances, &num_samples_per_instance[0], ao_samples, &ao_values[0], config.filter_mode, config.regularization_weight, vertex_ao );
+  bake::mapAOToVertices( scene, &num_samples_per_instance[0], ao_samples, &ao_values[0], config.filter_mode, config.regularization_weight, vertex_ao );
 
   printTimeElapsed( timer ); 
 

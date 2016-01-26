@@ -58,6 +58,16 @@ struct Instance
   float bbox_max[3];
 };
 
+// Packages up geometry for routines below.
+// A scene is a set of instances that index into meshes. Meshes may be shared between instances.
+struct Scene
+{
+  Mesh* meshes;
+  size_t num_meshes;
+  Instance* instances;
+  size_t num_instances;
+};
+
 
 struct AOSamples
 {
@@ -77,10 +87,7 @@ enum VertexFilterMode
 
 
 size_t distributeSamples(
-    const Mesh*     meshes,
-    const size_t    num_meshes,
-    const Instance* instances,
-    const size_t    num_instances,
+    const Scene&    scene,
     const size_t    min_samples_per_triangle,
     const size_t    requested_num_samples,
     size_t*         num_samples_per_instance // output
@@ -88,21 +95,15 @@ size_t distributeSamples(
 
 
 void sampleInstances(
-    const Mesh*         meshes,
-    const size_t        num_meshes,
-    const Instance*     instances,
-    const size_t        num_instances,
-    const size_t*       num_samples_per_instance,
-    const size_t        min_samples_per_triangle,
-    AOSamples&          ao_samples
+    const Scene&  scene,
+    const size_t* num_samples_per_instance,
+    const size_t  min_samples_per_triangle,
+    AOSamples&    ao_samples
     );
 
 
 void computeAO( 
-    const Mesh*      meshes,
-    const size_t     num_meshes,
-    const Instance*  instances,
-    const size_t     num_instances,
+    const Scene&     scene,
     const AOSamples& ao_samples,
     const int        rays_per_sample,
     const float*     bbox_min,
@@ -114,14 +115,8 @@ void computeAO(
 // This version takes extra "blocker" objects that occlude rays,
 // but do not have any AO samples of their own.
 void computeAOWithBlockers(
-    const Mesh*      meshes,
-    const size_t     num_meshes,
-    const Instance*  instances,
-    const size_t     num_instances,
-    const Mesh*      blocker_meshes,
-    const size_t     num_blocker_meshes,
-    const Instance*  blocker_instances,
-    const size_t     num_blocker_instances,
+    const Scene&     scene,
+    const Scene&     blockers,
     const AOSamples& ao_samples,
     const int        rays_per_sample,
     const float*     bbox_min,
@@ -130,10 +125,7 @@ void computeAOWithBlockers(
     );
 
 void mapAOToVertices(
-    const Mesh*             meshes,
-    const size_t            num_meshes,
-    const Instance*         instances,
-    const size_t            num_instances,
+    const Scene&            scene,
     const size_t*           num_samples_per_instance,
     const AOSamples&        ao_samples,
     const float*            ao_values,
