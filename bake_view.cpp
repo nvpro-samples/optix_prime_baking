@@ -130,8 +130,8 @@ public:
       glEnableVertexAttribArray(0);
 
       // Fill occlusion buffer and bind to shader.  This buffer is per instance.
-      GLuint occl_vbo;
-      glGenVertexArrays(1, &occl_vbo);
+      GLuint occl_vbo = 0;
+      glGenBuffers(1, &occl_vbo);
       glBindBuffer(GL_ARRAY_BUFFER, occl_vbo);
       glBufferData(GL_ARRAY_BUFFER, sizeof(float)*mesh.num_vertices, m_vertex_ao[instanceIdx], GL_STATIC_DRAW);
       glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, /*stride*/ 0, /*offset*/ 0);
