@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <float.h>
 #include <iostream>
+#include <map>
 
 using namespace optix::prime;
 
@@ -49,17 +50,48 @@ namespace
 
 void createInstances( Context& context,
     const bake::Mesh* meshes, const size_t num_meshes, const bake::Instance* instances, const size_t num_instances, 
+    // output, to keep allocations around
+    std::vector<Buffer<float3>* >& allocated_vertex_buffers,
+    std::vector<Buffer<int3>* >& allocated_index_buffers,
     std::vector<Model>& models, std::vector<RTPmodel>& prime_instances, std::vector<optix::Matrix4x4>& transforms )
 {
+
+  // For sharing identical buffers between Models
+  std::map< float*, Buffer<float3>* > unique_vertex_buffers;
+  std::map< unsigned int*, Buffer<int3>* > unique_index_buffers;
 
   const size_t model_offset = models.size();
   models.reserve(models.size() + num_meshes);
   for (size_t meshIdx = 0; meshIdx < num_meshes; ++meshIdx) {
     Model model = context->createModel();
     const bake::Mesh& mesh = meshes[meshIdx];
+
+    // Allocate or reuse vertex buffer and index buffer
+
+    Buffer<float3>* vertex_buffer = NULL;
+    if (unique_vertex_buffers.find(mesh.vertices) != unique_vertex_buffers.end()) {
+      vertex_buffer = unique_vertex_buffers.find(mesh.vertices)->second;
+    } else {
+      // Note: copy disabled for Buffer, so need pointer here
+      vertex_buffer = new Buffer<float3>( mesh.num_vertices, RTP_BUFFER_TYPE_CUDA_LINEAR, UNLOCKED, mesh.vertex_stride_bytes );
+      cudaMemcpy( vertex_buffer->ptr(), mesh.vertices, vertex_buffer->sizeInBytes(), cudaMemcpyHostToDevice );
+      unique_vertex_buffers[mesh.vertices] = vertex_buffer;
+      allocated_vertex_buffers.push_back(vertex_buffer);
+    }
+    
+    Buffer<int3>* index_buffer = NULL;
+    if (unique_index_buffers.find(mesh.tri_vertex_indices) != unique_index_buffers.end()) {
+      index_buffer = unique_index_buffers.find(mesh.tri_vertex_indices)->second;
+    } else {
+      index_buffer = new Buffer<int3>( mesh.num_triangles, RTP_BUFFER_TYPE_CUDA_LINEAR );
+      cudaMemcpy( index_buffer->ptr(), mesh.tri_vertex_indices, index_buffer->sizeInBytes(), cudaMemcpyHostToDevice );
+      unique_index_buffers[mesh.tri_vertex_indices] = index_buffer;
+      allocated_index_buffers.push_back(index_buffer);
+    }
+
     model->setTriangles(
-        mesh.num_triangles, RTP_BUFFER_TYPE_HOST, mesh.tri_vertex_indices,
-        mesh.num_vertices,  RTP_BUFFER_TYPE_HOST, mesh.vertices, mesh.vertex_stride_bytes
+        index_buffer->count(), index_buffer->type(), index_buffer->ptr(),
+        vertex_buffer->count(), vertex_buffer->type(), vertex_buffer->ptr(), vertex_buffer->stride()
         );
     model->update( 0 );
     models.push_back(model);  // Model is ref counted, so need to return it to prevent destruction
@@ -109,9 +141,13 @@ void bake::ao_optix_prime(
   std::vector<Model> models;
   std::vector<RTPmodel> prime_instances;
   std::vector<optix::Matrix4x4> transforms;
-  createInstances( ctx, meshes, num_meshes, instances, num_instances, models, prime_instances, transforms );
+  std::vector< Buffer<float3>* > allocated_vertex_buffers;
+  std::vector< Buffer<int3>* > allocated_index_buffers;
+  createInstances( ctx, meshes, num_meshes, instances, num_instances, 
+    allocated_vertex_buffers, allocated_index_buffers, models, prime_instances, transforms );
   if (num_blocker_instances > 0) {
-    createInstances( ctx, blocker_meshes, num_blocker_meshes, blocker_instances, num_blocker_instances, models, prime_instances, transforms ); 
+    createInstances( ctx, blocker_meshes, num_blocker_meshes, blocker_instances, num_blocker_instances, 
+      allocated_vertex_buffers, allocated_index_buffers, models, prime_instances, transforms ); 
   }
   Model scene = ctx->createModel();
   scene->setInstances( prime_instances.size(), RTP_BUFFER_TYPE_HOST, &prime_instances[0],
@@ -187,6 +223,16 @@ void bake::ao_optix_prime(
   for( size_t  i = 0; i < ao_samples.num_samples; ++i ) {
     ao_values[i] = 1.0f - ao_values[i] / rays_per_sample; 
   }
+
+  // clean up Buffer pointers.  Could be avoided with unique_ptr.
+  for (size_t i = 0; i < allocated_vertex_buffers.size(); ++i) {
+    delete allocated_vertex_buffers[i];
+  }
+  allocated_vertex_buffers.clear();
+  for (size_t i = 0; i < allocated_index_buffers.size(); ++i) {
+    delete allocated_index_buffers[i];
+  }
+  allocated_index_buffers.clear();
 
 
   std::cerr << "\n\tsetup ...           ";  printTimeElapsed( setup_timer );

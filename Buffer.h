@@ -43,31 +43,33 @@ template<typename T>
 class Buffer
 {
 public:
-  Buffer( size_t count=0, RTPbuffertype type=RTP_BUFFER_TYPE_HOST, PageLockedState pageLockedState=UNLOCKED ) 
+  Buffer( size_t count=0, RTPbuffertype type=RTP_BUFFER_TYPE_HOST, PageLockedState pageLockedState=UNLOCKED, unsigned stride=0 ) 
     : m_ptr( 0 ),
+      m_tempHost( 0 ),
       m_pageLockedState( pageLockedState )
   {
-    alloc( count, type, pageLockedState );
+    alloc( count, type, pageLockedState, stride );
   }
 
-  // Allocate without changing type
+  // Allocate without changing type or stride
   void alloc( size_t count )
   {
     alloc( count, m_type, m_pageLockedState );
   }
 
-  void alloc( size_t count, RTPbuffertype type, PageLockedState pageLockedState=UNLOCKED )
+  void alloc( size_t count, RTPbuffertype type, PageLockedState pageLockedState=UNLOCKED, unsigned stride=0 )
   {
     if( m_ptr )
       free();
 
     m_type = type;
     m_count = count;
+    m_stride = stride;
     if( m_count > 0 ) 
     {
       if( m_type == RTP_BUFFER_TYPE_HOST )
       {
-        m_ptr = new T[m_count];
+        m_ptr = (T*)malloc(sizeInBytes());
         if( pageLockedState )
           rtpHostBufferLock( m_ptr, sizeInBytes() ); // for improved transfer performance
         m_pageLockedState = pageLockedState;
@@ -84,9 +86,11 @@ public:
   {
     if( m_ptr && m_type == RTP_BUFFER_TYPE_HOST )
     {
-      if( m_pageLockedState )
+      if( m_pageLockedState ) {
         rtpHostBufferUnlock( m_ptr );
-      delete[] m_ptr;
+      }
+      ::free(m_ptr);
+      ::free(m_tempHost);
     }
     else 
     {
@@ -98,7 +102,9 @@ public:
     }
 
     m_ptr = 0;
+    m_tempHost = 0;
     m_count = 0;
+    m_stride = 0;
   }
 
   ~Buffer()
@@ -107,17 +113,18 @@ public:
   }
 
   size_t count()       const { return m_count; }
-  size_t sizeInBytes() const { return m_count * sizeof(T); }
+  size_t sizeInBytes() const { return m_count * (m_stride ? m_stride : sizeof(T)); }
   const T* ptr()       const { return m_ptr; }
   T* ptr()                   { return m_ptr; }
   RTPbuffertype type() const { return m_type; }
+  unsigned stride()    const { return m_stride; }
 
   const T* hostPtr() 
   {
     if( m_type == RTP_BUFFER_TYPE_HOST )
       return m_ptr;
 
-    m_tempHost.resize( m_count );
+    if (!m_tempHost) m_tempHost = (T*)malloc(sizeInBytes());
     CHK_CUDA( cudaMemcpy( &m_tempHost[0], m_ptr, sizeInBytes(), cudaMemcpyDeviceToHost ) );
     return &m_tempHost[0];
   }
@@ -127,8 +134,9 @@ protected:
   T* m_ptr;
   int m_device;
   size_t m_count;
+  unsigned m_stride;
   PageLockedState m_pageLockedState;
-  std::vector<T> m_tempHost;
+  T* m_tempHost;
   
 private:
   Buffer<T>( const Buffer<T>& );            // forbidden
