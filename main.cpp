@@ -230,7 +230,6 @@ namespace {
     
     bake::Instance instance;
     instance.mesh_index = meshes.size();
-    instance.mesh = &plane_mesh;
 
     const optix::Matrix4x4 mat = optix::Matrix4x4::identity();
     const float* matdata = mat.getData();
@@ -265,7 +264,6 @@ namespace {
     for (size_t i = 0; i < n; i++) {
       bake::Instance instance;
       instance.mesh_index = mesh_index;
-      instance.mesh = &bake_mesh;  // TODO: remove
       const optix::Matrix4x4 mat = optix::Matrix4x4::translate(translation) *
                                    optix::Matrix4x4::translate(bbox_base) *
                                    optix::Matrix4x4::rotate((i+1)*rot, rot_axis) *
@@ -388,7 +386,6 @@ int sample_main( int argc, const char** argv )
 
     bake::Instance instance;
     instance.mesh_index = meshIdx;
-    instance.mesh = &bake_mesh; // TODO: index, not pointer
     const optix::Matrix4x4 mat = optix::Matrix4x4::identity();  // TODO: use transform from file
     const float* matdata = mat.getData();
     std::copy(matdata, matdata+16, instance.xform);
@@ -409,8 +406,8 @@ int sample_main( int argc, const char** argv )
   assert(instances.size() == num_instances);
 
   // OptiX Prime requires all instances to have the same vertex stride
-  for (size_t i = 1; i < instances.size(); ++i) {
-    if (instances[i].mesh->vertex_stride_bytes != instances[0].mesh->vertex_stride_bytes) {
+  for (size_t i = 1; i < bake_meshes.size(); ++i) {
+    if (bake_meshes[i].vertex_stride_bytes != bake_meshes[0].vertex_stride_bytes) {
       std::cerr << "Error: all meshes must have the same vertex stride.  Bailing.\n";
       exit(-1);
     }
@@ -426,13 +423,13 @@ int sample_main( int argc, const char** argv )
   timer.start();
 
   std::vector<size_t> num_samples_per_instance(num_instances);
-  const size_t total_samples = bake::distributeSamples( &instances[0], instances.size(), config.min_samples_per_face, config.num_samples,
-    &num_samples_per_instance[0]);
+  const size_t total_samples = bake::distributeSamples( &bake_meshes[0], bake_meshes.size(), &instances[0], instances.size(),
+    config.min_samples_per_face, config.num_samples, &num_samples_per_instance[0]);
 
   bake::AOSamples ao_samples;
   allocate_ao_samples( ao_samples, total_samples );
 
-  bake::sampleInstances( &instances[0], num_instances, &num_samples_per_instance[0], config.min_samples_per_face, ao_samples );
+  bake::sampleInstances( &bake_meshes[0], bake_meshes.size(), &instances[0], num_instances, &num_samples_per_instance[0], config.min_samples_per_face, ao_samples );
   
   printTimeElapsed( timer ); 
 
@@ -455,7 +452,7 @@ int sample_main( int argc, const char** argv )
     std::vector<bake::Instance> blocker_instances;
     std::vector<float> plane_vertices;
     std::vector<unsigned int> plane_indices;
-    make_ground_plane(scene_bbox_min, scene_bbox_max, instances[0].mesh->vertex_stride_bytes, 
+    make_ground_plane(scene_bbox_min, scene_bbox_max, bake_meshes[0].vertex_stride_bytes, 
       plane_vertices, plane_indices, blocker_meshes, blocker_instances);
     bake::computeAOWithBlockers( &bake_meshes[0], bake_meshes.size(), &instances[0], num_instances, 
       &blocker_meshes[0], blocker_meshes.size(), &blocker_instances[0], blocker_instances.size(), 
@@ -471,7 +468,7 @@ int sample_main( int argc, const char** argv )
   timer.start();
   float** vertex_ao = new float*[ num_instances ];
   for (size_t i = 0; i < num_instances; ++i ) {
-    vertex_ao[i] = new float[ instances[i].mesh->num_vertices ];
+    vertex_ao[i] = new float[ bake_meshes[instances[i].mesh_index].num_vertices ];
   }
   bake::mapAOToVertices( &bake_meshes[0], bake_meshes.size(), &instances[0], num_instances, &num_samples_per_instance[0], ao_samples, &ao_values[0], config.filter_mode, config.regularization_weight, vertex_ao );
 
@@ -481,7 +478,7 @@ int sample_main( int argc, const char** argv )
   // Visualize results
   //
   std::cerr << "Launch viewer  ... \n" << std::endl;
-  bake::view( &instances[0], instances.size(), vertex_ao, scene_bbox_min, scene_bbox_max );
+  bake::view( &bake_meshes[0], bake_meshes.size(), &instances[0], instances.size(), vertex_ao, scene_bbox_min, scene_bbox_max );
 
   for (size_t i = 0; i < instances.size(); ++i) {
     delete [] vertex_ao[i];

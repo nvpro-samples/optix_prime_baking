@@ -53,7 +53,6 @@ struct Mesh
 struct Instance
 {
   float xform[16];  // 4x4 row major
-  Mesh *mesh;
   unsigned mesh_index;
   float bbox_min[3];
   float bbox_max[3];
@@ -78,6 +77,8 @@ enum VertexFilterMode
 
 
 size_t distributeSamples(
+    const Mesh*     meshes,
+    const size_t    num_meshes,
     const Instance* instances,
     const size_t    num_instances,
     const size_t    min_samples_per_triangle,
@@ -87,6 +88,8 @@ size_t distributeSamples(
 
 
 void sampleInstances(
+    const Mesh*         meshes,
+    const size_t        num_meshes,
     const Instance*     instances,
     const size_t        num_instances,
     const size_t*       num_samples_per_instance,

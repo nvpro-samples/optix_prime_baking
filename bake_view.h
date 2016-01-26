@@ -29,6 +29,8 @@ namespace bake
 {
 
   void view(
+    const bake::Mesh* meshes,
+    const size_t num_meshes,
     const bake::Instance* instances,
     const size_t num_instances,
     float const* const* vertex_colors,
