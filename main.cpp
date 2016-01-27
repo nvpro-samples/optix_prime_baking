@@ -293,7 +293,8 @@ int sample_main( int argc, const char** argv )
   SceneMemory* scene_memory;
   float scene_bbox_min[] = {FLT_MAX, FLT_MAX, FLT_MAX};
   float scene_bbox_max[] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
-  if (!load_obj_scene( config.scene_filename.c_str(), scene, scene_bbox_min, scene_bbox_max, scene_memory, config.num_instances_per_mesh )) {
+  if (!load_scene( config.scene_filename.c_str(), scene, scene_bbox_min, scene_bbox_max, scene_memory, config.num_instances_per_mesh )) {
+    std::cerr << "Failed to load scene, exiting" << std::endl;
     exit(-1);
   }
 
