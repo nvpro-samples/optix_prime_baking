@@ -9,6 +9,31 @@
 
 #include <cfloat>
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
+
+class AssertException : public std::runtime_error
+{
+public:
+  AssertException( const char* file, int line, const char* condition )
+    : std::runtime_error("Assertion Failed")
+  {
+    std::ostringstream ss;
+    ss << "Assertion Failed: " << file << ":" << line << ": " << condition;
+    msg = ss.str();
+  }
+  virtual ~AssertException() throw() {}
+  virtual const char* what() const throw() { return msg.c_str(); }
+private:
+  std::string msg;
+};
+
+// Runtime assertion that still works in Release mode
+#define RT_ASSERT(condition)                                                       \
+  do {                                                                             \
+    if(!(condition))                                                               \
+      throw AssertException( __FILE__, __LINE__, #condition );                     \
+  } while (0)
 
 namespace {
   struct Bk3dSceneMemory : public SceneMemory
@@ -50,7 +75,7 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
   std::fill(scene_bbox_max, scene_bbox_max+3, -FLT_MAX);
 
   for (int meshIdx = 0; meshIdx < bk3dData->pMeshes->n; ++meshIdx) {
-    // Assumptions:
+    // Assumptions (enforced with assertions):
     // - vertices are float
     // - vertices are in Attribute 0
     // - normals are in Attribute 1
@@ -72,10 +97,10 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
 
     // get the slot where the vertex pos is located (maybe mixed with other attributes)
 
-    assert(pMesh->pAttributes->n >= 1);
+    RT_ASSERT( pMesh->pAttributes->n >= 1 && "Mesh must have position attribute" );
 
     bk3d::Attribute* pPositionAttr = pMesh->pAttributes->p[0];
-    assert(pPositionAttr->formatGL == GL_FLOAT);
+    RT_ASSERT( pPositionAttr->formatGL == GL_FLOAT && "Mesh must have vertex positions of type float" );
 
     bk3d::Slot* pPositionSlot = pMesh->pSlots->p[pPositionAttr->slot];
     float* vertices = (float*)pPositionAttr->pAttributeBufferData;
@@ -86,7 +111,7 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
     unsigned normal_stride_bytes = 0;
     if (pMesh->pAttributes->n > 1) {
       bk3d::Attribute* pNormalAttr = pMesh->pAttributes->p[1];
-      assert(pNormalAttr->formatGL == GL_FLOAT);
+      RT_ASSERT( pNormalAttr->formatGL == GL_FLOAT && "Mesh must have normals of type float" );
 
       bk3d::Slot* pNormalSlot = pMesh->pSlots->p[pNormalAttr->slot];
       normals = (float*)pNormalAttr->pAttributeBufferData;
@@ -103,7 +128,7 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
       bk3d::PrimGroup* pPG = pMesh->pPrimGroups->p[pg];
       if(pPG->topologyGL != GL_TRIANGLES) continue;
 
-      assert(pPG->indexFormatGL == GL_UNSIGNED_INT || pPG->indexFormatGL == GL_INT);
+      RT_ASSERT( pPG->indexFormatGL == GL_UNSIGNED_INT || pPG->indexFormatGL == GL_INT );
 
       bake::Mesh bake_mesh;
 
