@@ -78,6 +78,9 @@ file(GLOB SOURCE_FILES *.cpp *.hpp *.inl *.h *.c loaders/*.cpp loaders/*.h)
 file(GLOB GLSL_FILES *.glsl)
 file(GLOB CUDA_FILES *.cu)
 
+# Files included from shared_sources will disable assert in debug mode unless we define this
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG")
+
 
 #####################################################################################
 # Executable
