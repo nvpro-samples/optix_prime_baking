@@ -19,8 +19,8 @@ bool load_scene( const char* filename, bake::Scene& scene, float* scene_bbox_min
   std::string extension = s.substr(pos);
   if (extension == ".obj") {
     return load_obj_scene(filename, scene, scene_bbox_min, scene_bbox_max, memory, num_instances_per_mesh);
-  } else if (extension == ".bk3d") {
-    //return load_bk3d_scene(filename, scene, scene_bbox_min, scene_bbox_max, memory, num_instances_per_mesh);
+  } else if (extension == ".bk3d" || extension == ".gz") {
+    return load_bk3d_scene(filename, scene, scene_bbox_min, scene_bbox_max, memory, num_instances_per_mesh);
   }
 
   std::cerr << "Unrecognized filename extension: " << extension << std::endl;

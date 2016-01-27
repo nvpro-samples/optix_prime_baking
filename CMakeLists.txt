@@ -51,6 +51,8 @@ if ( NOT OPTIX_FOUND )
   message(SEND_ERROR "Baking sample requires OptiX")
 endif()
 
+_add_package_ZLIB()
+
 # Find Eigen template lib for least squares fitting.
 # If any other samples need this library in the future, then move this block
 # to higher level CMakeLists.txt.
