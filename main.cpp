@@ -35,9 +35,17 @@
 #include <iostream>
 #include <string>
 #include <set>
+#include <sys/stat.h>
 
 const size_t NUM_RAYS = 64;
 const size_t SAMPLES_PER_FACE = 3;
+const char* DEFAULT_BK3D_FILE = "sled_v134.bk3d.gz";
+const char* DEFAULT_OBJ_FILE = "lucy.obj";
+#ifdef PROJECT_ABSDIRECTORY
+  #define ASSET_PATH PROJECT_ABSDIRECTORY "/assets/"
+#else
+  #define ASSET_PATH "./assets/"
+#endif
 
 
 // For parsing command line into constants
@@ -125,12 +133,31 @@ struct Config {
     }
 
     if (scene_filename.empty()) {
-      // default filename
-#ifdef PROJECT_ABSDIRECTORY
-      scene_filename = std::string(PROJECT_ABSDIRECTORY) + std::string("/assets/lucy.obj");
-#else
-      scene_filename = std::string( "./assets/lucy.obj" );
+
+      // Make default filename
+
+      const std::string asset_path(ASSET_PATH);
+
+#ifndef NOGZLIB
+      // Try bk3d file first
+      std::string bk3d_path = asset_path + std::string(DEFAULT_BK3D_FILE);
+      struct stat buf;
+      if (stat(bk3d_path.c_str(), &buf) == 0) {
+        scene_filename = bk3d_path;
+      }
 #endif
+      if (scene_filename.empty()) {
+        // Fall back to simpler obj file
+        std::string obj_path = asset_path + std::string(DEFAULT_OBJ_FILE);
+        struct stat buf;
+        if (stat(obj_path.c_str(), &buf) == 0) {
+          scene_filename = obj_path;
+        } else {
+          std::cerr << "Could not find default scene file (" << obj_path << "). Use options to specify one." << std::endl;
+          printUsageAndExit( argv[0] );
+        }
+      }
+     
     }
   }
 
