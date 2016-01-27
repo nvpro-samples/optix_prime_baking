@@ -74,7 +74,7 @@ endif()
 #####################################################################################
 # Source files for this project
 #
-file(GLOB SOURCE_FILES *.cpp *.hpp *.inl *.h *.c)
+file(GLOB SOURCE_FILES *.cpp *.hpp *.inl *.h *.c loaders/*.cpp loaders/*.h)
 file(GLOB GLSL_FILES *.glsl)
 file(GLOB CUDA_FILES *.cu)
 

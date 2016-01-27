@@ -23,6 +23,7 @@
 #include "bake_api.h"
 #include "bake_view.h"
 #include "bake_util.h"
+#include "loaders/load_scene.h"
 
 #include <main.h>
 #include <optixu/optixu_matrix_namespace.h>
@@ -245,43 +246,6 @@ namespace {
 
   }
 
-  // TODO: this should operate on entire scene
-  void make_debug_instances(bake::Mesh& bake_mesh, unsigned mesh_index, size_t n, std::vector<bake::Instance>& instances,
-                            float scene_bbox_min[3], float scene_bbox_max[3])
-  {
-
-    // Make up a transform per instance
-    const float3 bbox_base = optix::make_float3(0.5f*(bake_mesh.bbox_min[0] + bake_mesh.bbox_max[0]),
-                                                      bake_mesh.bbox_min[1],
-                                                0.5f*(bake_mesh.bbox_min[2] + bake_mesh.bbox_max[2]));
-    const float rot = 0.5236f;  // pi/6
-    const float3 rot_axis = optix::make_float3(0.0f, 1.0f, 0.0f);
-    const float scale_factor = 0.9f;
-    float scale = scale_factor;
-    const float3 base_translation = 1.01*optix::make_float3(bake_mesh.bbox_max[0] - bake_mesh.bbox_min[0], 0.0f, 0.0f);
-    float3 translation = scale_factor* base_translation;
-
-    for (size_t i = 0; i < n; i++) {
-      bake::Instance instance;
-      instance.mesh_index = mesh_index;
-      const optix::Matrix4x4 mat = optix::Matrix4x4::translate(translation) *
-                                   optix::Matrix4x4::translate(bbox_base) *
-                                   optix::Matrix4x4::rotate((i+1)*rot, rot_axis) *
-                                   optix::Matrix4x4::scale(optix::make_float3(scale)) *
-                                   optix::Matrix4x4::translate(-bbox_base);
-      scale *= scale_factor;
-      translation += scale*base_translation;
-
-      xform_bbox(mat, bake_mesh.bbox_min, bake_mesh.bbox_max, instance.bbox_min, instance.bbox_max);
-      expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_min);
-      expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_max);
-
-      const float* matdata = mat.getData();
-      std::copy(matdata, matdata+16, instance.xform);
-      instances.push_back(instance);
-    }
-  }
-
   void allocate_ao_samples(bake::AOSamples& ao_samples, unsigned int n) {
     ao_samples.num_samples = n;
     ao_samples.sample_positions = new float[3*n];
@@ -305,9 +269,6 @@ namespace {
 }
 
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include "tiny_obj_loader.h"
-
 
 // Required entry point
 //------------------------------------------------------------------------------
@@ -322,113 +283,58 @@ int sample_main( int argc, const char** argv )
   Timer timer;
 
   //
-  // Load model file
+  // Load scene
   //
-  std::cerr << "Load meshes ...              "; std::cerr.flush();
+  std::cerr << "Load scene ...              "; std::cerr.flush();
 
   timer.start();
-  std::vector<tinyobj::mesh_t> meshes;
-  for(size_t i = 0; i < config.obj_filenames.size(); ++i) { 
-    std::string errs;
-    tinyobj::mesh_t mesh;
-    bool loaded = tinyobj::LoadObj(mesh, errs, config.obj_filenames[i].c_str());
-    if (!errs.empty() || !loaded) {
-      std::cerr << errs << std::endl;
-      return 0; 
-    }
-    meshes.push_back(mesh);
+
+  bake::Scene scene;
+  SceneMemory* scene_memory;
+  float scene_bbox_min[] = {FLT_MAX, FLT_MAX, FLT_MAX};
+  float scene_bbox_max[] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+  if (!load_obj_scene( config.obj_filenames[0].c_str(), scene, scene_bbox_min, scene_bbox_max, scene_memory, config.num_instances_per_mesh )) {
+    exit(-1);
   }
 
   printTimeElapsed( timer ); 
 
-  std::cerr << "Mesh statistics:" << std::endl;
-  for (size_t i = 0; i < config.obj_filenames.size(); ++i) {
-    const tinyobj::mesh_t& mesh = meshes[i];
-    std::cerr << config.obj_filenames[i] << ": " << std::endl << "\t"
-              << mesh.positions.size()/3 << " vertices, "
-              << mesh.normals.size()/3 << " normals, " 
-              << mesh.indices.size()/3 << " triangles" << std::endl;
-  }
-  
-  std::cerr << "Minimum samples per face: " << config.min_samples_per_face << std::endl;
-
-  //
-  // Populate instances
-  //
-  std::vector<bake::Mesh> bake_meshes(meshes.size());
-  const size_t num_instances = meshes.size() * config.num_instances_per_mesh;
-  std::vector<bake::Instance> instances;
-  instances.reserve(num_instances);
-
-  float scene_bbox_min[] = {FLT_MAX, FLT_MAX, FLT_MAX};
-  float scene_bbox_max[] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
-  for (size_t meshIdx = 0; meshIdx < meshes.size(); ++meshIdx) {
-    
-    tinyobj::mesh_t& mesh = meshes[meshIdx];
-    bake::Mesh& bake_mesh = bake_meshes[meshIdx];
-    bake_mesh.num_vertices  = mesh.positions.size()/3;
-    bake_mesh.num_triangles = mesh.indices.size()/3;
-    bake_mesh.vertices      = &mesh.positions[0];
-    bake_mesh.vertex_stride_bytes = 0;
-    bake_mesh.normals       = mesh.normals.empty() ? NULL : &mesh.normals[0];
-    bake_mesh.normal_stride_bytes = 0;
-    bake_mesh.tri_vertex_indices = &mesh.indices[0];
-
-    // Build bbox for mesh
-
-    std::fill(bake_mesh.bbox_min, bake_mesh.bbox_min+3, FLT_MAX);
-    std::fill(bake_mesh.bbox_max, bake_mesh.bbox_max+3, -FLT_MAX);
-    for (size_t i = 0; i < mesh.positions.size()/3; ++i) {
-      expand_bbox(bake_mesh.bbox_min, bake_mesh.bbox_max, &mesh.positions[3*i]);
+  // Print scene stats
+  {
+    std::cerr << "Loaded scene: " << config.obj_filenames[0].c_str() << std::endl;
+    std::cerr << "\t" << scene.num_meshes << " meshes, " << scene.num_instances << " instances" << std::endl;
+    size_t num_vertices = 0;
+    size_t num_triangles = 0;
+    for (size_t i = 0; i < scene.num_meshes; ++i) {
+      num_vertices += scene.meshes[i].num_vertices;
+      num_triangles += scene.meshes[i].num_triangles;
     }
-
-    // Make instance
-
-    bake::Instance instance;
-    instance.mesh_index = meshIdx;
-    const optix::Matrix4x4 mat = optix::Matrix4x4::identity();  // TODO: use transform from file
-    const float* matdata = mat.getData();
-    std::copy(matdata, matdata+16, instance.xform);
-    
-    xform_bbox(mat, bake_mesh.bbox_min, bake_mesh.bbox_max, instance.bbox_min, instance.bbox_max);
-    expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_min);
-    expand_bbox(scene_bbox_min, scene_bbox_max, instance.bbox_max);
-
-    instances.push_back(instance);
-
-    if (config.num_instances_per_mesh > 1) {
-      make_debug_instances(bake_mesh, meshIdx, config.num_instances_per_mesh-1, instances, scene_bbox_min, scene_bbox_max);
-    }
-    
+    std::cerr << "\tuninstanced vertices: " << num_vertices << std::endl;
+    std::cerr << "\tuninstanced triangles: " << num_triangles << std::endl;
   }
-
-
-  assert(instances.size() == num_instances);
 
   // OptiX Prime requires all instances to have the same vertex stride
-  for (size_t i = 1; i < bake_meshes.size(); ++i) {
-    if (bake_meshes[i].vertex_stride_bytes != bake_meshes[0].vertex_stride_bytes) {
+  for (size_t i = 1; i < scene.num_meshes; ++i) {
+    if (scene.meshes[i].vertex_stride_bytes != scene.meshes[0].vertex_stride_bytes) {
       std::cerr << "Error: all meshes must have the same vertex stride.  Bailing.\n";
       exit(-1);
     }
   }
 
+
   //
   // Generate AO samples
   //
+
+  std::cerr << "Minimum samples per face: " << config.min_samples_per_face << std::endl;
 
   std::cerr << "Generate sample points ... \n"; std::cerr.flush();
 
   timer.reset();
   timer.start();
+  
 
-  bake::Scene scene;
-  scene.meshes = &bake_meshes[0];
-  scene.num_meshes = bake_meshes.size();
-  scene.instances = &instances[0];
-  scene.num_instances = instances.size();
-
-  std::vector<size_t> num_samples_per_instance(num_instances);
+  std::vector<size_t> num_samples_per_instance(scene.num_instances);
   const size_t total_samples = bake::distributeSamples( scene, config.min_samples_per_face, config.num_samples, &num_samples_per_instance[0] );
 
   bake::AOSamples ao_samples;
@@ -457,7 +363,7 @@ int sample_main( int argc, const char** argv )
     std::vector<bake::Instance> blocker_instances;
     std::vector<float> plane_vertices;
     std::vector<unsigned int> plane_indices;
-    make_ground_plane(scene_bbox_min, scene_bbox_max, bake_meshes[0].vertex_stride_bytes, 
+    make_ground_plane(scene_bbox_min, scene_bbox_max, scene.meshes[0].vertex_stride_bytes, 
       plane_vertices, plane_indices, blocker_meshes, blocker_instances);
     bake::Scene blockers = { &blocker_meshes[0], blocker_meshes.size(), &blocker_instances[0], blocker_instances.size() };
     bake::computeAOWithBlockers(scene, blockers,
@@ -471,9 +377,9 @@ int sample_main( int argc, const char** argv )
 
   timer.reset();
   timer.start();
-  float** vertex_ao = new float*[ num_instances ];
-  for (size_t i = 0; i < num_instances; ++i ) {
-    vertex_ao[i] = new float[ bake_meshes[instances[i].mesh_index].num_vertices ];
+  float** vertex_ao = new float*[ scene.num_instances ];
+  for (size_t i = 0; i < scene.num_instances; ++i ) {
+    vertex_ao[i] = new float[ scene.meshes[scene.instances[i].mesh_index].num_vertices ];
   }
   bake::mapAOToVertices( scene, &num_samples_per_instance[0], ao_samples, &ao_values[0], config.filter_mode, config.regularization_weight, vertex_ao );
 
@@ -483,14 +389,16 @@ int sample_main( int argc, const char** argv )
   // Visualize results
   //
   std::cerr << "Launch viewer  ... \n" << std::endl;
-  bake::view( &bake_meshes[0], bake_meshes.size(), &instances[0], instances.size(), vertex_ao, scene_bbox_min, scene_bbox_max );
+  bake::view( scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, vertex_ao, scene_bbox_min, scene_bbox_max );
 
-  for (size_t i = 0; i < instances.size(); ++i) {
+  for (size_t i = 0; i < scene.num_instances; ++i) {
     delete [] vertex_ao[i];
   }
   delete [] vertex_ao;
 
   destroy_ao_samples( ao_samples );
+
+  delete scene_memory;
   
   return 1;
 }
