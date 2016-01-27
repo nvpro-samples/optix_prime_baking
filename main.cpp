@@ -1,4 +1,5 @@
 //
+//
 // Copyright (c) 2015 NVIDIA Corporation.  All rights reserved.
 // 
 // NVIDIA Corporation and its licensors retain all intellectual property and
@@ -18,7 +19,6 @@
 // INABILITY TO USE THIS SOFTWARE, EVEN IF NVIDIA HAS BEEN ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGES
 //
-
 
 #include "bake_api.h"
 #include "bake_view.h"
@@ -42,7 +42,7 @@ const size_t SAMPLES_PER_FACE = 3;
 
 // For parsing command line into constants
 struct Config {
-  std::vector<std::string> obj_filenames;
+  std::string scene_filename;
   size_t num_instances_per_mesh;
   int num_samples;
   int min_samples_per_face;
@@ -73,10 +73,10 @@ struct Config {
       {
         printUsageAndExit( argv[0] ); 
       } 
-      else if( (arg == "-o" || arg == "--obj") && i+1 < argc ) 
+      else if( (arg == "-f" || arg == "--file") && i+1 < argc ) 
       {
-        std::string str = argv[++i];
-        obj_filenames.push_back(str);
+        assert( scene_filename.empty() && "multiple -f (--file) flags found when parsing command line");
+        scene_filename = argv[++i];
       } 
       else if ( (arg == "-i" || arg == "--instances") && i+1 < argc )
       {
@@ -124,12 +124,12 @@ struct Config {
       }
     }
 
-    if (obj_filenames.empty()) {
+    if (scene_filename.empty()) {
       // default filename
 #ifdef PROJECT_ABSDIRECTORY
-      obj_filenames.push_back(std::string(PROJECT_ABSDIRECTORY) + std::string("/assets/lucy.obj"));
+      scene_filename = std::string(PROJECT_ABSDIRECTORY) + std::string("/assets/lucy.obj");
 #else
-      obj_filenames.push_back(std::string( "./assets/lucy.obj" ));
+      scene_filename = std::string( "./assets/lucy.obj" );
 #endif
     }
   }
@@ -140,7 +140,7 @@ struct Config {
     << "Usage  : " << argv0 << " [options]\n"
     << "App options:\n"
     << "  -h  | --help                          Print this usage message\n"
-    << "  -o  | --obj <obj_file>                Specify model to be rendered.  Repeat this flag for multiple models.\n"
+    << "  -f  | --file <scene_file>             Specify model to be rendered.\n"
     << "  -i  | --instances <n>                 Number of instances per mesh (default 1).  For testing.\n"
     << "  -r  | --rays    <n>                   Number of rays per sample point for gather (default " << NUM_RAYS << ")\n"
     << "  -s  | --samples <n>                   Number of sample points on mesh (default " << SAMPLES_PER_FACE << " per face; any extra samples are based on area)\n"
@@ -293,7 +293,7 @@ int sample_main( int argc, const char** argv )
   SceneMemory* scene_memory;
   float scene_bbox_min[] = {FLT_MAX, FLT_MAX, FLT_MAX};
   float scene_bbox_max[] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
-  if (!load_obj_scene( config.obj_filenames[0].c_str(), scene, scene_bbox_min, scene_bbox_max, scene_memory, config.num_instances_per_mesh )) {
+  if (!load_obj_scene( config.scene_filename.c_str(), scene, scene_bbox_min, scene_bbox_max, scene_memory, config.num_instances_per_mesh )) {
     exit(-1);
   }
 
@@ -301,7 +301,7 @@ int sample_main( int argc, const char** argv )
 
   // Print scene stats
   {
-    std::cerr << "Loaded scene: " << config.obj_filenames[0].c_str() << std::endl;
+    std::cerr << "Loaded scene: " << config.scene_filename << std::endl;
     std::cerr << "\t" << scene.num_meshes << " meshes, " << scene.num_instances << " instances" << std::endl;
     size_t num_vertices = 0;
     size_t num_triangles = 0;
