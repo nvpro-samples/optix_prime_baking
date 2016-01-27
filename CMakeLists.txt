@@ -53,6 +53,17 @@ endif()
 
 _add_package_ZLIB()
 
+# get binary files that we don't store in github
+SET (MODELS_DOWNLOAD_ENABLE OFF CACHE BOOL "Download extra scene files")
+SET (MODELS_DOWNLOAD_FORCE OFF CACHE BOOL "Download scene files even if they already exist.  Requires MODELS_DOWNLOAD to be enabled." )
+if (${MODELS_DOWNLOAD_ENABLE})
+  set(SCENE_FILES "sled_v134.bk3d.gz")
+  _download_files( "${SCENE_FILES}"
+                   "http://developer.download.nvidia.com/ProGraphics/nvpro-samples" 
+                  "${CMAKE_CURRENT_SOURCE_DIR}/assets/" 
+                  ${MODELS_DOWNLOAD_FORCE} )
+endif()
+
 # Find Eigen template lib for least squares fitting.
 # If any other samples need this library in the future, then move this block
 # to higher level CMakeLists.txt.
