@@ -49,7 +49,7 @@ The sample is configured on the command line; use the "-h" flag to list options 
 ~~~
 App options:
   -h  | --help                          Print this usage message
-  -o  | --obj <obj_file>                Specify model to be rendered.  Repeat this flag for multiple models.
+  -f  | --file <scene_file>             Specify model to be rendered (obj, bk3d, or bk3d.gz).
   -i  | --instances <n>                 Number of instances per mesh (default 1).  For testing.
   -r  | --rays    <n>                   Number of rays per sample point for gather (default 64)
   -s  | --samples <n>                   Number of sample points on mesh (default 3 per face; any extra samples are based on area)

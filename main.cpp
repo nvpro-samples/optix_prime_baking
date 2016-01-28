@@ -167,7 +167,7 @@ struct Config {
     << "Usage  : " << argv0 << " [options]\n"
     << "App options:\n"
     << "  -h  | --help                          Print this usage message\n"
-    << "  -f  | --file <scene_file>             Specify model to be rendered.\n"
+    << "  -f  | --file <scene_file>             Specify model to be rendered (obj, bk3d, or bk3d.gz).\n"
     << "  -i  | --instances <n>                 Number of instances per mesh (default 1).  For testing.\n"
     << "  -r  | --rays    <n>                   Number of rays per sample point for gather (default " << NUM_RAYS << ")\n"
     << "  -s  | --samples <n>                   Number of sample points on mesh (default " << SAMPLES_PER_FACE << " per face; any extra samples are based on area)\n"
