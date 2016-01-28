@@ -85,6 +85,7 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
     // Make separate mesh/instance per prim group
     bk3d::Mesh* pMesh = bk3dData->pMeshes->p[meshIdx];
 
+    // Only GL_TRIANGLES are supported, not strips or fans
     bool skip_mesh = true;
     for (int pg = 0; pg < pMesh->pPrimGroups->n; pg++) {
       bk3d::PrimGroup* pPG = pMesh->pPrimGroups->p[pg];
