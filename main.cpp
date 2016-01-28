@@ -257,7 +257,7 @@ namespace {
     plane_mesh.tri_vertex_indices = &plane_indices[0];
     
     bake::Instance instance;
-    instance.mesh_index = meshes.size();
+    instance.mesh_index = (unsigned int)meshes.size();
 
     const optix::Matrix4x4 mat = optix::Matrix4x4::identity();
     const float* matdata = mat.getData();
@@ -273,7 +273,7 @@ namespace {
 
   }
 
-  void allocate_ao_samples(bake::AOSamples& ao_samples, unsigned int n) {
+  void allocate_ao_samples(bake::AOSamples& ao_samples, size_t n) {
     ao_samples.num_samples = n;
     ao_samples.sample_positions = new float[3*n];
     ao_samples.sample_normals = new float[3*n];

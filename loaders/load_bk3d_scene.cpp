@@ -145,7 +145,7 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
       bake_mesh.tri_vertex_indices = (unsigned int*)pPG->pIndexBufferData;
 
       bool compute_bbox = false;
-      for (size_t k = 0; k < 3; ++k) {
+      for (int k = 0; k < 3; ++k) {
         bake_mesh.bbox_min[k] = pPG->aabbox.min[k];
         bake_mesh.bbox_max[k] = pPG->aabbox.max[k];
         if (bake_mesh.bbox_min[k] > bake_mesh.bbox_max[k]) {
@@ -164,7 +164,7 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
       }
 
       bake::Instance instance;
-      instance.mesh_index = memory->meshes.size();
+      instance.mesh_index = (unsigned)memory->meshes.size();
 
       optix::Matrix4x4 group_xform = optix::Matrix4x4::identity();
       if (pPG->pTransforms && pPG->pTransforms->n > 0) {
