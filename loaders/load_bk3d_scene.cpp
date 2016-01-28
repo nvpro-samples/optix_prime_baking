@@ -121,8 +121,8 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
 
     optix::Matrix4x4 mesh_xform = optix::Matrix4x4::identity();
     if (pMesh->pTransforms && pMesh->pTransforms->n > 0) {
-      mesh_xform = optix::Matrix4x4(pMesh->pTransforms->p[0]->Matrix().m);
-      mesh_xform.transpose();  // OptiX matrices are transposed from OpenGL/bk3d
+      // Note: OptiX matrices are transposed from OpenGL/bk3d
+      mesh_xform = optix::Matrix4x4(pMesh->pTransforms->p[0]->Matrix().m).transpose();
     }
 
     for (int pg = 0; pg < pMesh->pPrimGroups->n; pg++) {
@@ -168,8 +168,7 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
 
       optix::Matrix4x4 group_xform = optix::Matrix4x4::identity();
       if (pPG->pTransforms && pPG->pTransforms->n > 0) {
-        group_xform = optix::Matrix4x4(pPG->pTransforms->p[0]->Matrix().m);
-        group_xform.transpose();
+        group_xform = optix::Matrix4x4(pPG->pTransforms->p[0]->Matrix().m).transpose();
       }
       optix::Matrix4x4 mat = mesh_xform * group_xform;
       std::copy(mat.getData(), mat.getData()+16, instance.xform);
