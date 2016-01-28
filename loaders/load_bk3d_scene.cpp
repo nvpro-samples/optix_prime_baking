@@ -158,8 +158,10 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
         // Bbox stored in file is empty, so compute from vertices.
         std::fill(bake_mesh.bbox_min, bake_mesh.bbox_min+3, FLT_MAX);
         std::fill(bake_mesh.bbox_max, bake_mesh.bbox_max+3, -FLT_MAX);
+        unsigned char* p = reinterpret_cast<unsigned char*>(bake_mesh.vertices);
         for (size_t i = 0; i < bake_mesh.num_vertices; ++i) {
-          expand_bbox(bake_mesh.bbox_min, bake_mesh.bbox_max, &bake_mesh.vertices[3*i]);
+          expand_bbox(bake_mesh.bbox_min, bake_mesh.bbox_max, reinterpret_cast<float*>(p));
+          p += bake_mesh.vertex_stride_bytes ? bake_mesh.vertex_stride_bytes : 3*sizeof(float);
         }
       }
 
