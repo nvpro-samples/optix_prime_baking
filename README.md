@@ -7,7 +7,7 @@ optix_prime_baking
 This sample shows how to precompute ambient occlusion with OptiX Prime, and store it on the
 vertices of a mesh for use during final shading with OpenGL.  The steps are as follows:
 
-  * **Distribute sample points uniformly over a mesh**. We place a minimum number of points per triangle, then use area-based sampling for any remaining points.  The total number of samples is a user parameter.
+  * **Distribute sample points over a mesh**. We place a minimum number of points per triangle, then use area-based sampling for any remaining points.  The total number of samples is a user parameter.
 
   * **Compute ambient occlusion at the sample points**.  To help limit memory usage, we shoot rays in multiple batches using OptiX Prime.  Each batch has a single jittered ray on a subset of the sample points.  Geometry can be instanced and/or marked as a *blocker* which occludes rays but does not receive sample points of its own.
 
@@ -30,6 +30,7 @@ Quick build instructions:
   - //github.com/nvpro-samples/build_all.git
   - //github.com/nvpro-samples/shared_optix.git
   - //github.com/nvpro-samples/shared_sources.git
+  - //github.com/nvpro-samples/shared_external.git
   - //github.com/nvpro-samples/optix_prime_baking.git
 
 2) Download and install a recent version of [CMake](https://cmake.org)
