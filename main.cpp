@@ -39,8 +39,8 @@
 
 const size_t NUM_RAYS = 64;
 const size_t SAMPLES_PER_FACE = 3;
-const char* DEFAULT_BK3D_FILE = "sled_v134.bk3d.gz";
-const char* DEFAULT_OBJ_FILE = "lucy.obj";
+const char* DEFAULT_BK3DGZ_FILE = "sled_v134.bk3d.gz";
+const char* DEFAULT_BK3D_FILE = "lucy_v134.bk3d";
 #ifdef PROJECT_ABSDIRECTORY
   #define ASSET_PATH PROJECT_ABSDIRECTORY "/assets/"
 #else
@@ -139,16 +139,16 @@ struct Config {
       const std::string asset_path(ASSET_PATH);
 
 #ifndef NOGZLIB
-      // Try bk3d file first
-      std::string bk3d_path = asset_path + std::string(DEFAULT_BK3D_FILE);
+      // Try more interesting gzipped file first
+      std::string bk3d_path = asset_path + std::string(DEFAULT_BK3DGZ_FILE);
       struct stat buf;
       if (stat(bk3d_path.c_str(), &buf) == 0) {
         scene_filename = bk3d_path;
       }
 #endif
       if (scene_filename.empty()) {
-        // Fall back to simpler obj file
-        std::string obj_path = asset_path + std::string(DEFAULT_OBJ_FILE);
+        // Fall back to simpler file
+        std::string obj_path = asset_path + std::string(DEFAULT_BK3D_FILE);
         struct stat buf;
         if (stat(obj_path.c_str(), &buf) == 0) {
           scene_filename = obj_path;
