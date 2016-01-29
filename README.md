@@ -2,6 +2,8 @@
 optix_prime_baking
 ==================
 
+![Rocket Sled](https://github.com/nvpro-samples/optix_prime_baking/blob/master/doc/sled_multiple_meshes.png)
+
 This sample shows how to precompute ambient occlusion with OptiX Prime, and store it on the
 vertices of a mesh for use during final shading with OpenGL.  The steps are as follows:
 
@@ -72,6 +74,42 @@ Mesh detail showing triangle size:
 All geometry consists of *instances*, which are pairs of meshes and transforms.  A mesh referenced by multiple instances is only stored once in memory.  For example, the scene below has 3 instances of a mesh with 1.3M triangles, and was baked using less than 1 GB of GPU memory for the scene, rays, etc.  This scene also has an invisible ground plane marked as a *blocker*.
 
 ![Instancing Example](https://github.com/nvpro-samples/optix_prime_baking/blob/master/doc/hunter_instances.png)
+
+#### Supported scene formats 
+
+Loaders are provided for OBJ and [Bak3d](https://github.com/tlorach/Bak3d).  The OBJ loader flattens all groups into a single mesh.  The bk3d loader preserves separate meshes, as shown in the teaser image above of a rocket sled with 109 meshes.  Use the utilities in the Bak3d repo to convert other formats, or write a new loader for your favorite format and add it to the "loaders" subdirectory.
+
+The rocket sled .bk3d file can be downloaded via MODELS_DOWNLOAD_ENABLE in the cmake config.
+
+#### Performance
+
+Timings for the sled scene on an NVIDIA Quadro M6000 GPU are shown below, including the optional least squares filtering step which is not GPU accelerated.
+
+~~~
+> ../../../bin_x64/optix_prime_baking -f ../assets/sled_v134.bk3d.gz -w 1
+Load scene ...                 96.27 ms
+Loaded scene: ../assets/sled_v134.bk3d.gz
+	109 meshes, 109 instances
+	uninstanced vertices: 348015
+	uninstanced triangles: 418036
+Minimum samples per face: 3
+Generate sample points ... 
+  117.97 ms
+Total samples: 1254108
+Compute AO ...             
+	setup ...             335.70 ms
+	accum raygen ...        0.17 ms
+	accum query ...       793.83 ms
+	accum update AO ...     0.35 ms
+	copy AO out ...         0.51 ms
+ 1142.60 ms
+Map AO to vertices  ...    
+	build mass matrices ...             149.94 ms
+	build regularization matrices ...   403.11 ms
+	decompose matrices ...              265.34 ms
+	solve linear systems ...            10.17 ms
+  829.68 ms
+~~~
 
 
 
