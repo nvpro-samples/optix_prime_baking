@@ -21,6 +21,7 @@ vertices of a mesh for use during final shading with OpenGL.  The steps are as f
   * CUDA 7.5+ and matching driver with supported GPU.
   * A recent version of CMake (tested with 2.8.12).
   * OptiX 3.9.0 from the shared_optix git repo (see below).  No separate install of OptiX is needed.
+  * On Linux, [GLFW](http://www.glfw.org/) (tested with 3.2.0).
 
 #### How to Build & Run
 
@@ -35,18 +36,20 @@ Quick build instructions:
 
 2) Download and install a recent version of [CMake](https://cmake.org)
 
-3) Open CMake-gui (Windows) or ccmake (Linux):
+3) Linux only: download and install [GLFW](http://www.glfw.org/).
+
+4) Open CMake-gui (Windows) or ccmake (Linux):
   - Source code to: /nvpro_ samples/build_all
   - Build folder: /nvpro_samples/build_all/build
   - Optional: toggle MODELS_DOWNLOAD_ENABLE to download extra scenes during the configure step.
   - Configure and select a compiler if prompted.
   - Generate
 
-4) Open the nvpro_samples.sln into Visual Studio, and Build All.  On Linux, 'make' in the build directory.
+5) Open the nvpro_samples.sln into Visual Studio, and Build All.  On Linux, 'make' in the build directory.
 
-5) Select the optix_prime_baking sample as the Startup project in VS.
+6) Select the optix_prime_baking sample as the Startup project in VS.
 
-6) Click Run in VS, or run the 'nvpro_samples/bin_x64/optix_prime_baking' binary in Linux.
+7) Click Run in VS, or run the 'nvpro_samples/bin_x64/optix_prime_baking' binary in Linux.
 
 The sample is configured on the command line; use the "-h" flag to list options or check main.cpp.  The options at the time the sample was created are shown below:
 ~~~
