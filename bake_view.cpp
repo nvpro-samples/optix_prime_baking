@@ -53,6 +53,8 @@ private:
   const vec3f m_initial_eye;
   const vec3f m_initial_lookat;
 
+  bool m_draw_edges;
+
 public:
   GLSLProgram m_prog;
 
@@ -75,6 +77,7 @@ public:
     m_vertex_ao(vertex_ao),
     m_initial_eye(eye),
     m_initial_lookat(lookat),
+    m_draw_edges(false),
     m_prog("Mesh Program") {}
 
   virtual bool init()
@@ -144,6 +147,12 @@ public:
 
     glEnable(GL_DEPTH_TEST);
 
+    if (m_draw_edges) {
+      // Offset filled triangles to reduce Z fighting with edge lines
+      glEnable ( GL_POLYGON_OFFSET_FILL );
+    }
+    glPolygonOffset ( 1, 1 );
+
     return true;
   }
 
@@ -151,23 +160,47 @@ public:
   {
     WindowInertiaCamera::display();
 
+    m_prog.enable();
     mat4f world2screen = m_projection * m_camera.m4_view;
     m_prog.setUniformMatrix4fv("world2screen", world2screen.mat_array, /*transpose*/ false);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-    m_prog.enable();
+
     for (size_t i = 0; i < m_num_instances; ++i) {
-      
-      glBindVertexArray(m_vaos[i]);
 
       // Note: optix matrix is transposed from opengl
       m_prog.setUniformMatrix4fv("object2world", const_cast<GLfloat*>(m_instances[i].xform), /*transpose*/ true);
+      
+      glBindVertexArray(m_vaos[i]);
+      glEnableVertexAttribArray(1);  // occlusion attrib
 
       const bake::Mesh& mesh = m_meshes[m_instances[i].mesh_index];
       const size_t num_triangles = mesh.num_triangles;
       const GLsizei num_indices = static_cast<GLsizei>(num_triangles*3);
       glDrawElements(GL_TRIANGLES, num_indices, GL_UNSIGNED_INT, 0);
+    }
+
+    if (m_draw_edges) {
+
+      glPolygonMode ( GL_FRONT_AND_BACK, GL_LINE );	
+      for (size_t i = 0; i < m_num_instances; ++i) {
+
+        // Note: optix matrix is transposed from opengl
+        m_prog.setUniformMatrix4fv("object2world", const_cast<GLfloat*>(m_instances[i].xform), /*transpose*/ true);
+        
+        glBindVertexArray(m_vaos[i]);
+        // replace occlusion array with constant value for edges
+        glDisableVertexAttribArray(1);  
+        glVertexAttrib1f(1, 0.2f);
+
+        const bake::Mesh& mesh = m_meshes[m_instances[i].mesh_index];
+        const size_t num_triangles = mesh.num_triangles;
+        const GLsizei num_indices = static_cast<GLsizei>(num_triangles*3);
+        glDrawElements(GL_TRIANGLES, num_indices, GL_UNSIGNED_INT, 0);
+      }
+      glPolygonMode ( GL_FRONT_AND_BACK, GL_FILL );
+
     }
 
     swapBuffers();
@@ -189,7 +222,15 @@ public:
         m_camera.look_at(vec3f(m_initial_lookat - initial_view_dist*current_view_vector), m_initial_lookat, /*reset*/ true);
         break;
       }
-
+      case 'e':  // toggle edges
+      case 'E':
+        m_draw_edges = !m_draw_edges;
+        if (m_draw_edges) {
+          glEnable ( GL_POLYGON_OFFSET_FILL );
+        } else {
+          glDisable( GL_POLYGON_OFFSET_FILL );
+        }
+        break;
     }
   }
   
