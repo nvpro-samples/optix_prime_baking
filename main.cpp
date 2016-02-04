@@ -177,6 +177,11 @@ struct Config {
     << "  -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default 0.1)\n"
     << "        --no_least_squares              Disable least squares filtering\n"
 #endif
+    << std::endl
+    << "Viewer keys:\n"
+    << "   e                                    Draw mesh edges on/off\n"
+    << "   f                                    Frame scene\n"
+    << "   q                                    Quit\n"
     << std::endl;
     
     exit(1);
