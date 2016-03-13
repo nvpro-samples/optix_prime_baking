@@ -55,12 +55,15 @@ The sample is configured on the command line; use the "-h" flag to list options 
 ~~~
 App options:
   -h  | --help                          Print this usage message
-  -f  | --file <scene_file>             Specify model to be rendered (obj, bk3d, or bk3d.gz).
+  -f  | --file <scene_file>             Specify model to be rendered (obj, bk3d, bk3d.gz, csf, csf.gz).
+  -o  | --outfile <vertex_ao_file>      Specify raw file where per-instance ao vertices are stored (very basic fileformat).
   -i  | --instances <n>                 Number of instances per mesh (default 1).  For testing.
   -r  | --rays    <n>                   Number of rays per sample point for gather (default 64)
   -s  | --samples <n>                   Number of sample points on mesh (default 3 per face; any extra samples are based on area)
   -t  | --samples_per_face <n>          Minimum number of samples per face (default 3)
-        --no_ground_plane               Disable virtual XZ ground plane
+  -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(offset). (default is 1 100.0 0.0001)
+        --no_ground_plane               Disable virtual ground plane
+        --no_viewer                     Disable OpenGL viewer
   -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default 0.1)
         --no_least_squares              Disable least squares filtering
  ~~~
@@ -81,9 +84,28 @@ All geometry consists of *instances*, which are pairs of meshes and transforms. 
 
 #### Supported scene formats 
 
-Loaders are provided for OBJ and [Bak3d](https://github.com/tlorach/Bak3d).  The OBJ loader flattens all groups into a single mesh.  The bk3d loader preserves separate meshes, as shown in the teaser image above of a rocket sled with 109 meshes.  Use the utilities in the Bak3d repo to convert other formats, or write a new loader for your favorite format and add it to the "loaders" subdirectory.
+Loaders are provided for OBJ, [Bak3d](https://github.com/tlorach/Bak3d) and CSF (basic cad scene file format used in various nvpro-samples).  The OBJ loader flattens all groups into a single mesh.  The bk3d/csf loaders preserve separate meshes, as shown in the teaser image above of a rocket sled with 109 meshes.  Use the utilities in the Bak3d repo to convert other formats, or write a new loader for your favorite format and add it to the "loaders" subdirectory.
 
 The rocket sled .bk3d file can be downloaded via MODELS_DOWNLOAD_ENABLE in the cmake config.
+
+#### Output format
+
+The sample uses a very basic format, that allows storage of the per-instance vertex-AO values in a binary file.
+
+~~~ cpp
+{
+  uint64_t num_instances;
+  uint64_t num_vertices;
+  
+  struct Instance {
+    uint64_t storage_identifier;  // set by loader
+    uint64_t offset_vertices;     // at which index to start in vertex array
+    uint64_t num_vertices;        // how many ao vertex values used by instance
+  } instances[num_instances];
+  
+  float ao_values[num_vertices];  // one value per vertex
+}
+~~~
 
 #### Performance
 

@@ -167,6 +167,7 @@ bool load_bk3d_scene( const char* filename, bake::Scene& scene, float scene_bbox
 
       bake::Instance instance;
       instance.mesh_index = (unsigned)memory->meshes.size();
+      instance.storage_identifier = (uint64_t(meshIdx) << 32) | uint64_t(pg);
 
       optix::Matrix4x4 group_xform = optix::Matrix4x4::identity();
       if (pPG->pTransforms && pPG->pTransforms->n > 0) {

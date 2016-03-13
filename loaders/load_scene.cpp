@@ -28,8 +28,18 @@ bool load_scene( const char* filename, bake::Scene& scene, float* scene_bbox_min
     return false;
   }
 #endif
+  if (extension == ".gz" && pos > 1) {
+    size_t prepos = s.rfind(".", pos-1);
+    if (prepos != std::string::npos) {
+      extension = s.substr(prepos);
+    }
+  }
 
-  if (extension == ".bk3d" || extension == ".gz") {
+  if (extension == ".csf" || extension == ".csf.gz") {
+    return load_csf_scene(filename, scene, scene_bbox_min, scene_bbox_max, memory, num_instances_per_mesh);
+  }
+
+  if (extension == ".bk3d" || extension == ".bk3d.gz") {
     return load_bk3d_scene(filename, scene, scene_bbox_min, scene_bbox_max, memory, num_instances_per_mesh);
   }
 

@@ -23,6 +23,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 
 namespace bake
@@ -53,6 +54,7 @@ struct Mesh
 struct Instance
 {
   float xform[16];  // 4x4 row major
+  uint64_t storage_identifier; // for saving the baked results
   unsigned mesh_index;
   float bbox_min[3];
   float bbox_max[3];

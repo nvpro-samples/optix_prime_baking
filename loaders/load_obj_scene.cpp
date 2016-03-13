@@ -62,6 +62,7 @@ bool load_obj_scene( const char* filename, bake::Scene& scene, float scene_bbox_
   memory->instances.resize(1);
   bake::Instance& instance = memory->instances[0];
   instance.mesh_index = 0;
+  instance.storage_identifier = 0;
   const optix::Matrix4x4 mat = optix::Matrix4x4::identity();
   const float* matdata = mat.getData();
   std::copy(matdata, matdata+16, instance.xform);

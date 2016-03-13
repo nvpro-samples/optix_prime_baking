@@ -58,6 +58,11 @@ struct Config {
   bake::VertexFilterMode filter_mode;
   float regularization_weight;
   bool use_ground_plane_blocker;
+  bool use_viewer;
+  int  ground_upaxis;
+  float ground_scale_factor;
+  float ground_offset_factor;
+  std::string output_filename;
 
   Config( int argc, const char ** argv ) {
     // set defaults
@@ -65,6 +70,9 @@ struct Config {
     num_samples = 0;  // default means determine from mesh
     min_samples_per_face = SAMPLES_PER_FACE;
     num_rays    = NUM_RAYS; 
+    ground_upaxis = 1;
+    ground_scale_factor  = 100.0f;
+    ground_offset_factor = 0.0001f;
 #ifdef EIGEN3_ENABLED
     filter_mode = bake::VERTEX_FILTER_LEAST_SQUARES;
 #else
@@ -72,6 +80,8 @@ struct Config {
 #endif
     regularization_weight = 0.1f;
     use_ground_plane_blocker = true;
+    use_viewer = true;
+
 
     // parse arguments
     for ( int i = 1; i < argc; ++i ) 
@@ -86,6 +96,11 @@ struct Config {
         assert( scene_filename.empty() && "multiple -f (--file) flags found when parsing command line");
         scene_filename = argv[++i];
       } 
+      else if ((arg == "-o" || arg == "--outfile") && i + 1 < argc)
+      {
+        assert(output_filename.empty() && "multiple -o (--outfile) flags found when parsing command line");
+        output_filename = argv[++i];
+      }
       else if ( (arg == "-i" || arg == "--instances") && i+1 < argc )
       {
         int n = -1;
@@ -113,8 +128,23 @@ struct Config {
           printParseErrorAndExit( argv[0], arg, argv[i] );
         }
       }
+      else if ((arg == "-g" || arg == "--ground_setup") && i + 3 < argc)
+      {
+        if (sscanf(argv[++i], "%d", &ground_upaxis) != 1 || (ground_upaxis < 0 || ground_upaxis > 5)) {
+          printParseErrorAndExit(argv[0], arg, argv[i]);
+        }
+        if (sscanf(argv[++i], "%f", &ground_scale_factor) != 1) {
+          printParseErrorAndExit(argv[0], arg, argv[i]);
+        }
+        if (sscanf(argv[++i], "%f", &ground_offset_factor) != 1) {
+          printParseErrorAndExit(argv[0], arg, argv[i]);
+        }
+      }
       else if ( (arg == "--no_ground_plane" ) ) {
         use_ground_plane_blocker = false;
+      }
+      else if ((arg == "--no_viewer")) {
+        use_viewer = false;
       }
       else if ( (arg == "--no_least_squares" ) ) {
         filter_mode = bake::VERTEX_FILTER_AREA_BASED;  
@@ -167,12 +197,15 @@ struct Config {
     << "Usage  : " << argv0 << " [options]\n"
     << "App options:\n"
     << "  -h  | --help                          Print this usage message\n"
-    << "  -f  | --file <scene_file>             Specify model to be rendered (obj, bk3d, or bk3d.gz).\n"
+    << "  -f  | --file <scene_file>             Specify model to be rendered (obj, bk3d, bk3d.gz, csf, csf.gz).\n"
+    << "  -o  | --outfile <vertex_ao_file>      Specify raw file where per-instance ao vertices are stored (very basic fileformat).\n"
     << "  -i  | --instances <n>                 Number of instances per mesh (default 1).  For testing.\n"
     << "  -r  | --rays    <n>                   Number of rays per sample point for gather (default " << NUM_RAYS << ")\n"
     << "  -s  | --samples <n>                   Number of sample points on mesh (default " << SAMPLES_PER_FACE << " per face; any extra samples are based on area)\n"
     << "  -t  | --samples_per_face <n>          Minimum number of samples per face (default " << SAMPLES_PER_FACE << ")\n"
-    << "        --no_ground_plane               Disable virtual XZ ground plane\n"
+    << "  -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(offset). (default is 1 100.0 0.0001)\n"
+    << "        --no_ground_plane               Disable virtual ground plane\n"
+    << "        --no_viewer                     Disable OpenGL viewer\n"
 #ifdef EIGEN3_ENABLED
     << "  -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default 0.1)\n"
     << "        --no_least_squares              Disable least squares filtering\n"
@@ -217,28 +250,64 @@ namespace {
     }
   }
 
-  void make_ground_plane(float scene_bbox_min[3], float scene_bbox_max[3], unsigned scene_vertex_stride_bytes,
+  void set_vertex_entry(float* vertices, int idx, int axis, float* vec)
+  {
+    vertices[3 * idx + axis] = vec[axis];
+  }
+
+  void make_ground_plane(float scene_bbox_min[3], float scene_bbox_max[3],
+                         unsigned upaxis, float scale_factor, float offset_factor,
+                         unsigned scene_vertex_stride_bytes,
                          std::vector<float>& plane_vertices, std::vector<unsigned int>& plane_indices,
                          std::vector<bake::Mesh>& meshes, std::vector<bake::Instance>& instances)
   {
 
-    const unsigned int index_data[] = {0, 1, 2, 0, 2, 3};
-    plane_indices.resize(6);
-    std::copy(index_data, index_data+6, plane_indices.begin());
+    const unsigned int index_data[] = {0, 1, 2, 0, 2, 3, 2, 1, 0, 3, 2, 0};
+    unsigned int num_indices = sizeof(index_data) / sizeof(index_data[0]);
+    plane_indices.resize(num_indices);
+    std::copy(index_data, index_data + num_indices, plane_indices.begin());
     float scene_extents[] = {scene_bbox_max[0] - scene_bbox_min[0],
                              scene_bbox_max[1] - scene_bbox_min[1],
                              scene_bbox_max[2] - scene_bbox_min[2]};
-    const float scale_factor = 100.0f;
+    
     float ground_min[] = {scene_bbox_max[0] - scale_factor*scene_extents[0],
-                          scene_bbox_min[1],
+                          scene_bbox_min[1] - scale_factor*scene_extents[1],
                           scene_bbox_max[2] - scale_factor*scene_extents[2]};
     float ground_max[] = {scene_bbox_min[0] + scale_factor*scene_extents[0],
-                          scene_bbox_min[1],
+                          scene_bbox_min[1] + scale_factor*scene_extents[1],
                           scene_bbox_min[2] + scale_factor*scene_extents[2]};
-    const float vertex_data[] = {ground_min[0], ground_min[1], ground_min[2],
-                                 ground_max[0], ground_min[1], ground_min[2],
-                                 ground_max[0], ground_min[1], ground_max[2],
-                                 ground_min[0], ground_min[1], ground_max[2]};
+
+    if (upaxis > 2){
+      upaxis %= 3;
+      ground_min[upaxis] = scene_bbox_max[upaxis] + scene_extents[upaxis] * offset_factor;
+      ground_max[upaxis] = scene_bbox_max[upaxis] + scene_extents[upaxis] * offset_factor;
+    }
+    else{
+      ground_min[upaxis] = scene_bbox_min[upaxis] - scene_extents[upaxis] * offset_factor;
+      ground_max[upaxis] = scene_bbox_min[upaxis] - scene_extents[upaxis] * offset_factor;
+    }
+
+    int axis0 = (upaxis + 2) % 3;
+    int axis1 = (upaxis + 1) % 3;
+
+    float vertex_data[4 * 3] = {};
+    set_vertex_entry(vertex_data, 0, upaxis, ground_min);
+    set_vertex_entry(vertex_data, 0, axis0, ground_min);
+    set_vertex_entry(vertex_data, 0, axis1, ground_min);
+    
+    set_vertex_entry(vertex_data, 1, upaxis, ground_min);
+    set_vertex_entry(vertex_data, 1, axis0, ground_max);
+    set_vertex_entry(vertex_data, 1, axis1, ground_min);
+
+    set_vertex_entry(vertex_data, 2, upaxis, ground_min);
+    set_vertex_entry(vertex_data, 2, axis0, ground_max);
+    set_vertex_entry(vertex_data, 2, axis1, ground_max);
+
+    set_vertex_entry(vertex_data, 3, upaxis, ground_min);
+    set_vertex_entry(vertex_data, 3, axis0, ground_min);
+    set_vertex_entry(vertex_data, 3, axis1, ground_max);
+    
+
 
     // OptiX Prime requires all meshes in the same scene to have the same vertex stride.
     const unsigned vertex_stride_bytes = scene_vertex_stride_bytes > 0 ? scene_vertex_stride_bytes : 3*sizeof(float);
@@ -254,7 +323,7 @@ namespace {
     
     bake::Mesh plane_mesh;
     plane_mesh.num_vertices  = 4;
-    plane_mesh.num_triangles = 2;
+    plane_mesh.num_triangles = num_indices/3;
     plane_mesh.vertices      = &plane_vertices[0];
     plane_mesh.vertex_stride_bytes = vertex_stride_bytes;
     plane_mesh.normals       = NULL;
@@ -296,6 +365,47 @@ namespace {
     delete [] ao_samples.sample_infos;
     ao_samples.sample_infos = NULL;
     ao_samples.num_samples = 0;
+  }
+
+  bool save_results(const char* outputfile, bake::Scene & scene, const float* const * ao_vertex)
+  {
+    FILE* file = fopen(outputfile, "wb");
+    if (!file) return false;
+
+    uint64_t numInstances = scene.num_instances;
+    uint64_t numVertices = 0;
+    
+    for (size_t i = 0; i < scene.num_instances; i++){
+      numVertices += scene.meshes[scene.instances[i].mesh_index].num_vertices;
+    }
+
+    // write header
+    fwrite(&numInstances, sizeof(numInstances), 1, file);
+    fwrite(&numVertices, sizeof(numVertices), 1, file);
+    
+    // write instances
+
+    uint64_t vertexOffset = 0;
+    for (size_t i = 0; i < scene.num_instances; i++){
+      uint64_t identifier = scene.instances[i].storage_identifier;
+      fwrite(&identifier, sizeof(identifier), 1, file);
+      fwrite(&vertexOffset, sizeof(vertexOffset), 1, file);
+      numVertices = scene.meshes[scene.instances[i].mesh_index].num_vertices;
+      fwrite(&numVertices, sizeof(numVertices), 1, file);
+
+      vertexOffset += numVertices;
+    }
+
+    // write vertices
+    for (size_t i = 0; i < scene.num_instances; i++){
+      numVertices = scene.meshes[scene.instances[i].mesh_index].num_vertices;
+      fwrite(ao_vertex[i], sizeof(float)*numVertices, 1, file);
+    }
+    
+    fflush(file);
+    fclose(file);
+
+    return true;
   }
 
 }
@@ -396,7 +506,8 @@ int sample_main( int argc, const char** argv )
     std::vector<bake::Instance> blocker_instances;
     std::vector<float> plane_vertices;
     std::vector<unsigned int> plane_indices;
-    make_ground_plane(scene_bbox_min, scene_bbox_max, scene.meshes[0].vertex_stride_bytes, 
+    make_ground_plane(scene_bbox_min, scene_bbox_max, config.ground_upaxis, config.ground_scale_factor, config.ground_offset_factor,
+      scene.meshes[0].vertex_stride_bytes, 
       plane_vertices, plane_indices, blocker_meshes, blocker_instances);
     bake::Scene blockers = { &blocker_meshes[0], blocker_meshes.size(), &blocker_instances[0], blocker_instances.size() };
     bake::computeAOWithBlockers(scene, blockers,
@@ -418,11 +529,28 @@ int sample_main( int argc, const char** argv )
 
   printTimeElapsed( timer ); 
 
-  //
-  // Visualize results
-  //
-  std::cerr << "Launch viewer  ... \n" << std::endl;
-  bake::view( scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, vertex_ao, scene_bbox_min, scene_bbox_max );
+  if (!config.output_filename.empty())
+  {
+    std::cerr << "Save vertex ao ...              "; std::cerr.flush();
+    timer.reset();
+    timer.start();
+    bool saved = save_results(config.output_filename.c_str(), scene, vertex_ao);
+    printTimeElapsed(timer);
+    if (saved){
+      std::cerr << "Saved vertex ao to: " << config.output_filename << std::endl;
+    }
+    else{
+      std::cerr << "Failed to save vertex ao to: " << config.output_filename << std::endl;
+    }    
+  }
+
+  if (config.use_viewer){
+    //
+    // Visualize results
+    //
+    std::cerr << "Launch viewer  ... \n" << std::endl;
+    bake::view(scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, vertex_ao, scene_bbox_min, scene_bbox_max);
+  }
 
   for (size_t i = 0; i < scene.num_instances; ++i) {
     delete [] vertex_ao[i];
