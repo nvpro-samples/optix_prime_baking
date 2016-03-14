@@ -47,7 +47,7 @@ void generateRaysKernel(
     const int px,
     const int py,
     const int sqrt_passes,
-    const float scene_scale,
+    const float scene_offset,
     const int num_samples,
     const float3* sample_normals,
     const float3* sample_face_normals,
@@ -65,7 +65,7 @@ void generateRaysKernel(
   const float3 sample_norm      = sample_normals[idx]; 
   const float3 sample_face_norm = sample_face_normals[idx];
   const float3 sample_pos       = sample_positions[idx];
-  const float3 ray_origin       = sample_pos + 0.01f * scene_scale * sample_norm;
+  const float3 ray_origin       = sample_pos + scene_offset * sample_norm;
   optix::Onb onb( sample_norm );
 
   float3 ray_dir;
@@ -89,7 +89,7 @@ void generateRaysKernel(
 }
 
 __host__
-void bake::generateRaysDevice(unsigned int seed, int px, int py, int sqrt_passes, float scene_scale, const bake::AOSamples& ao_samples, Ray* rays )
+void bake::generateRaysDevice(unsigned int seed, int px, int py, int sqrt_passes, float scene_offset, const bake::AOSamples& ao_samples, Ray* rays )
 {
   const int block_size  = 512;                                                           
   const int block_count = idivCeil( (int)ao_samples.num_samples, block_size );                              
@@ -99,7 +99,7 @@ void bake::generateRaysDevice(unsigned int seed, int px, int py, int sqrt_passes
       px,
       py,
       sqrt_passes,
-      scene_scale,
+      scene_offset,
       (int)ao_samples.num_samples,
       (float3*)ao_samples.sample_normals,
       (float3*)ao_samples.sample_face_normals,

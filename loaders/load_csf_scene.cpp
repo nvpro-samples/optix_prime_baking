@@ -72,17 +72,22 @@ bool load_csf_scene(const char* filename, bake::Scene& scene, float scene_bbox_m
 
   CSFSceneMemory* memory = new CSFSceneMemory(csf, csfMem);
 
-  std::vector<bool>   referencedGeometry(csf->numGeometries, false);
+  std::vector<int>   referencedGeometry(csf->numGeometries, 0);
+
+  // for debugging large models
+//#define GEOMETRY_UPPER_LIMIT  5000
 
   int numObjects = 0;
   for (int n = 0; n < csf->numNodes; n++){
     CSFNode* node = csf->nodes + n;
 
     if (node->geometryIDX < 0) continue;
-
+#ifdef GEOMETRY_UPPER_LIMIT
+    if (node->geometryIDX > GEOMETRY_UPPER_LIMIT) continue;
+#endif
     for (int p = 0; p < node->numParts; p++){
       if (node->parts[p].active){
-        referencedGeometry[node->geometryIDX] = true;
+        referencedGeometry[node->geometryIDX] = 1;
         numObjects++;
         break;
       }
@@ -96,12 +101,7 @@ bool load_csf_scene(const char* filename, bake::Scene& scene, float scene_bbox_m
   std::fill(scene_bbox_max, scene_bbox_max + 3, -FLT_MAX);
 
   for (int g = 0; g < csf->numGeometries; g++) {
-    // Assumptions (enforced with assertions):
-    // - vertices are float
-    // - vertices are in Attribute 0
-    // - normals are in Attribute 1
-    // - indices are unsigned int format (could be unsigned short etc.)
-    // - bk3d file doesn't give separate indices for attributes
+    if (!referencedGeometry[g]) continue;
 
     // Make separate mesh/instance per prim group
     CSFGeometry* geom = csf->geometries + g;
@@ -133,6 +133,8 @@ bool load_csf_scene(const char* filename, bake::Scene& scene, float scene_bbox_m
       }
     }
 
+    referencedGeometry[g] = int(memory->meshes.size());
+
     memory->meshes.push_back(bake_mesh);
   }
 
@@ -140,7 +142,9 @@ bool load_csf_scene(const char* filename, bake::Scene& scene, float scene_bbox_m
     CSFNode* node = csf->nodes + n;
 
     if (node->geometryIDX < 0) continue;
-
+#ifdef GEOMETRY_UPPER_LIMIT
+    if (node->geometryIDX > GEOMETRY_UPPER_LIMIT) continue;
+#endif
     // fixme, for simplicity we currently don't deal with individual part baking
     bool active = false;
     for (int p = 0; p < node->numParts; p++){
@@ -153,7 +157,7 @@ bool load_csf_scene(const char* filename, bake::Scene& scene, float scene_bbox_m
     if (!active) continue;
 
     bake::Instance instance;
-    instance.mesh_index = node->geometryIDX;
+    instance.mesh_index = referencedGeometry[node->geometryIDX];
     instance.storage_identifier = n;
 
     bake::Mesh& bake_mesh = memory->meshes[node->geometryIDX];
