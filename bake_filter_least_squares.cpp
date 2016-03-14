@@ -381,7 +381,17 @@ void bake::filter_least_squares(
   Timer decompose_timer;
   Timer solve_timer;
 
-  for (size_t meshIdx = 0; meshIdx < scene.num_meshes; meshIdx++) {
+  std::vector<size_t> sample_offset_per_instance(scene.num_instances);
+  {
+    size_t sample_offset = 0;
+    for (size_t i = 0; i < scene.num_instances; ++i) {
+      sample_offset_per_instance[i] = sample_offset;
+      sample_offset += num_samples_per_instance[i];
+    }
+  }
+
+#pragma omp parallel for
+  for (ptrdiff_t meshIdx = 0; meshIdx < ptrdiff_t(scene.num_meshes); meshIdx++) {
 
     // Build reg. matrix once, it does not depend on rigid xform per instance
     SparseMatrix regularization_matrix;
@@ -390,9 +400,11 @@ void bake::filter_least_squares(
     }
 
     // Filter all the instances that point to this mesh
-    size_t sample_offset = 0;
-    for (size_t i = 0; i < scene.num_instances; ++i) {
+#pragma omp parallel for
+    for (ptrdiff_t i = 0; i < ptrdiff_t(scene.num_instances); ++i) {
       if (scene.instances[i].mesh_index == meshIdx) {
+        size_t sample_offset = sample_offset_per_instance[i];
+
         // Point to samples for this instance
         AOSamples instance_ao_samples;
         instance_ao_samples.num_samples = num_samples_per_instance[i];
@@ -406,8 +418,6 @@ void bake::filter_least_squares(
         filter_mesh_least_squares(scene.meshes[meshIdx], instance_ao_samples, instance_ao_values, regularization_weight, regularization_matrix,
           vertex_ao[i], mass_matrix_timer, decompose_timer, solve_timer);
       }
-
-      sample_offset += num_samples_per_instance[i];
     }
   }
 

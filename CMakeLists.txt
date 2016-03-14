@@ -53,6 +53,13 @@ endif()
 
 _add_package_ZLIB()
 
+find_package ( OpenMP )
+if(OPENMP_FOUND)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
+
 # get binary files that we don't store in github
 SET (MODELS_DOWNLOAD_ENABLE ON CACHE BOOL "Download extra model for optix_prime_baking")
 SET (MODELS_DOWNLOAD_FORCE OFF CACHE BOOL "Force Download extra model for optix_prime_baking.  Requires MODELS_DOWNLOAD to be enabled." )

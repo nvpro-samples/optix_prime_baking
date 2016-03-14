@@ -81,8 +81,19 @@ void bake::filter(
     float**              vertex_ao
     )
 {
-  size_t sample_offset = 0;
-  for (size_t i = 0; i < scene.num_instances; ++i) {
+  std::vector<size_t> sample_offset_per_instance(scene.num_instances);
+  {
+    size_t sample_offset = 0;
+    for (size_t i = 0; i < scene.num_instances; ++i) {
+      sample_offset_per_instance[i] = sample_offset;
+      sample_offset += num_samples_per_instance[i];
+    }
+  }
+
+#pragma omp parallel for
+  for (ptrdiff_t i = 0; i < ptrdiff_t(scene.num_instances); ++i) {
+    size_t sample_offset = sample_offset_per_instance[i];
+
     // Point to samples for this instance
     AOSamples instance_ao_samples;
     instance_ao_samples.num_samples = num_samples_per_instance[i];
@@ -94,8 +105,6 @@ void bake::filter(
     const float* instance_ao_values = ao_values + sample_offset;
 
     filter_mesh_area_weighted(scene.meshes[scene.instances[i].mesh_index], instance_ao_samples, instance_ao_values, vertex_ao[i]);
-
-    sample_offset += num_samples_per_instance[i];
   }
 }
 
