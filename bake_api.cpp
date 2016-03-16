@@ -37,6 +37,7 @@ void bake::computeAO(
     const AOSamples&  ao_samples,
     const int         rays_per_sample,
     const float       scene_offset_scale,
+    const float       scene_maxdistance_scale,
     const float*      bbox_min,
     const float*      bbox_max,
     float*            ao_values 
@@ -44,7 +45,7 @@ void bake::computeAO(
 {
   Scene blockers = {0};
   bake::ao_optix_prime( scene, blockers,
-                        ao_samples, rays_per_sample, scene_offset_scale, bbox_min, bbox_max, ao_values);
+    ao_samples, rays_per_sample, scene_offset_scale, scene_maxdistance_scale, bbox_min, bbox_max, ao_values);
 
 }
 
@@ -54,6 +55,7 @@ void bake::computeAOWithBlockers(
     const AOSamples&  ao_samples,
     const int         rays_per_sample,
     const float       scene_offset_scale,
+    const float       scene_maxdistance_scale,
     const float*      bbox_min,
     const float*      bbox_max,
     float*            ao_values 
@@ -61,7 +63,7 @@ void bake::computeAOWithBlockers(
 {
 
   bake::ao_optix_prime( scene, blockers,
-                        ao_samples, rays_per_sample, scene_offset_scale, bbox_min, bbox_max, ao_values );
+    ao_samples, rays_per_sample, scene_offset_scale, scene_maxdistance_scale, bbox_min, bbox_max, ao_values);
 
 }
 

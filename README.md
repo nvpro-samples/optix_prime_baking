@@ -61,7 +61,8 @@ App options:
   -r  | --rays    <n>                   Number of rays per sample point for gather (default 64)
   -s  | --samples <n>                   Number of sample points on mesh (default 3 per face; any extra samples are based on area)
   -t  | --samples_per_face <n>          Minimum number of samples per face (default 3)
-  -d  | --distance_scale <s>            Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default 0.01)
+  -d  | --ray_distance_scale <s>        Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default 0.01)
+  -m  | --hit_distance_scale <s>        Maximum hit distance to contribute:    max distance = maximum scene extent * s. (default 10.0)
   -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(offset). (default is 1 100.0 0.0001)
         --no_ground_plane               Disable virtual ground plane
         --no_viewer                     Disable OpenGL viewer

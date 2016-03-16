@@ -122,6 +122,7 @@ void bake::ao_optix_prime(
     const bake::AOSamples& ao_samples,
     const int rays_per_sample,
     const float  scene_offset_scale,
+    const float  scene_maxdistance_scale,
     const float* bbox_min,
     const float* bbox_max,
     float* ao_values
@@ -205,7 +206,7 @@ void bake::ao_optix_prime(
     {
       ACCUM_TIME(raygen_timer,    generateRaysDevice(seed, i, j, sqrt_rays_per_sample, scene_scale * scene_offset_scale, ao_samples_device, rays.ptr()));
       ACCUM_TIME( query_timer,    query->execute( 0 ) );
-      ACCUM_TIME( updateao_timer, updateAODevice( (int)num_samples, hits.ptr(), ao.ptr() ) );
+      ACCUM_TIME(updateao_timer,  updateAODevice((int)num_samples, scene_scale * scene_maxdistance_scale, hits.ptr(), ao.ptr()));
     }
 
     // copy ao to ao_values

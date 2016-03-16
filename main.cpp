@@ -63,6 +63,7 @@ struct Config {
   float ground_scale_factor;
   float ground_offset_factor;
   float scene_offset_scale;
+  float scene_maxdistance_scale;
   std::string output_filename;
 
   Config( int argc, const char ** argv ) {
@@ -75,6 +76,7 @@ struct Config {
     ground_scale_factor  = 100.0f;
     ground_offset_factor = 0.0001f;
     scene_offset_scale = 0.01f;
+    scene_maxdistance_scale = 10.0f;
 #ifdef EIGEN3_ENABLED
     filter_mode = bake::VERTEX_FILTER_LEAST_SQUARES;
 #else
@@ -124,9 +126,15 @@ struct Config {
         }
 
       }
-      else if ((arg == "-d" || arg == "--distance_scale") && i + 1 < argc)
+      else if ((arg == "-d" || arg == "--ray_distance_scale") && i + 1 < argc)
       {
         if (sscanf(argv[++i], "%f", &scene_offset_scale) != 1) {
+          printParseErrorAndExit(argv[0], arg, argv[i]);
+        }
+      }
+      else if ((arg == "-m" || arg == "--hit_distance_scale") && i + 1 < argc)
+      {
+        if (sscanf(argv[++i], "%f", &scene_maxdistance_scale) != 1) {
           printParseErrorAndExit(argv[0], arg, argv[i]);
         }
       }
@@ -211,7 +219,8 @@ struct Config {
     << "  -r  | --rays    <n>                   Number of rays per sample point for gather (default " << NUM_RAYS << ")\n"
     << "  -s  | --samples <n>                   Number of sample points on mesh (default " << SAMPLES_PER_FACE << " per face; any extra samples are based on area)\n"
     << "  -t  | --samples_per_face <n>          Minimum number of samples per face (default " << SAMPLES_PER_FACE << ")\n"
-    << "  -d  | --distance_scale <s>            Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default 0.01)\n"
+    << "  -d  | --ray_distance_scale <s>        Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default 0.01)\n"
+    << "  -m  | --hit_distance_scale <s>        Maximum hit distance to contribute: max distance = maximum scene extent * s. (default 10.0)\n"
     << "  -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(offset). (default is 1 100.0 0.0001)\n"
     << "        --no_ground_plane               Disable virtual ground plane\n"
     << "        --no_viewer                     Disable OpenGL viewer\n"
@@ -520,9 +529,9 @@ int sample_main( int argc, const char** argv )
       plane_vertices, plane_indices, blocker_meshes, blocker_instances);
     bake::Scene blockers = { &blocker_meshes[0], blocker_meshes.size(), &blocker_instances[0], blocker_instances.size() };
     bake::computeAOWithBlockers(scene, blockers,
-      ao_samples, config.num_rays, config.scene_offset_scale, scene_bbox_min, scene_bbox_max, &ao_values[0]);
+      ao_samples, config.num_rays, config.scene_offset_scale, config.scene_maxdistance_scale, scene_bbox_min, scene_bbox_max, &ao_values[0]);
   } else {
-    bake::computeAO(scene, ao_samples, config.num_rays, config.scene_offset_scale, scene_bbox_min, scene_bbox_max, &ao_values[0]);
+    bake::computeAO(scene, ao_samples, config.num_rays, config.scene_offset_scale, config.scene_maxdistance_scale, scene_bbox_min, scene_bbox_max, &ao_values[0]);
   }
   printTimeElapsed( timer ); 
 

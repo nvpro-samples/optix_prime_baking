@@ -115,23 +115,24 @@ void bake::generateRaysDevice(unsigned int seed, int px, int py, int sqrt_passes
 //------------------------------------------------------------------------------
 
 __global__
-void updateAOKernel( int num_samples, const float* hit_data, float* ao_data )
+void updateAOKernel(int num_samples, float maxdistance, const float* hit_data, float* ao_data)
 {
   int idx = threadIdx.x + blockIdx.x*blockDim.x;                                 
   if( idx >= num_samples )                                                             
     return;
 
-  ao_data[idx] += hit_data[idx] > 0 ? 1.0f : 0.0f;
+  float distance = hit_data[idx];
+  ao_data[idx] += distance > 0.0 && distance < maxdistance ? 1.0f : 0.0f;
 }
 
 // Precondition: ao output initialized to 0 before first pass
 __host__
-void bake::updateAODevice( int num_samples, const float* hits, float* ao )
+void bake::updateAODevice( int num_samples, float maxdistance, const float* hits, float* ao )
 {
   int block_size  = 512;                                                           
   int block_count = idivCeil( num_samples, block_size );                              
 
-  updateAOKernel<<<block_count,block_size>>>( num_samples, hits, ao );
+  updateAOKernel <<<block_count, block_size >>>(num_samples, maxdistance, hits, ao);
 }
 
 
