@@ -75,15 +75,16 @@ bool load_csf_scene(const char* filename, bake::Scene& scene, float scene_bbox_m
   std::vector<int>   referencedGeometry(csf->numGeometries, 0);
 
   // for debugging large models
-//#define GEOMETRY_UPPER_LIMIT  5000
+//#define GEOMETRY_LOWER_LIMIT  13400
+//#define GEOMETRY_UPPER_LIMIT  17000
 
   int numObjects = 0;
   for (int n = 0; n < csf->numNodes; n++){
     CSFNode* node = csf->nodes + n;
 
     if (node->geometryIDX < 0) continue;
-#ifdef GEOMETRY_UPPER_LIMIT
-    if (node->geometryIDX > GEOMETRY_UPPER_LIMIT) continue;
+#if defined(GEOMETRY_UPPER_LIMIT) && defined(GEOMETRY_LOWER_LIMIT)
+    if (node->geometryIDX < GEOMETRY_LOWER_LIMIT  || node->geometryIDX > GEOMETRY_UPPER_LIMIT) continue;
 #endif
     for (int p = 0; p < node->numParts; p++){
       if (node->parts[p].active){
@@ -142,8 +143,8 @@ bool load_csf_scene(const char* filename, bake::Scene& scene, float scene_bbox_m
     CSFNode* node = csf->nodes + n;
 
     if (node->geometryIDX < 0) continue;
-#ifdef GEOMETRY_UPPER_LIMIT
-    if (node->geometryIDX > GEOMETRY_UPPER_LIMIT) continue;
+#if defined(GEOMETRY_UPPER_LIMIT) && defined(GEOMETRY_LOWER_LIMIT)
+    if (node->geometryIDX < GEOMETRY_LOWER_LIMIT || node->geometryIDX > GEOMETRY_UPPER_LIMIT) continue;
 #endif
     // fixme, for simplicity we currently don't deal with individual part baking
     bool active = false;
