@@ -239,8 +239,19 @@ void bake::sample_instances(
     bake::AOSamples&  ao_samples
     )
 {
-  size_t sample_offset = 0;
-  for (size_t i = 0; i < scene.num_instances; ++i) {
+
+  std::vector<size_t> sample_offsets(scene.num_instances);
+  {
+    size_t sample_offset = 0;
+    for (size_t i = 0; i < scene.num_instances; ++i) {
+      sample_offsets[i] = sample_offset;
+      sample_offset += num_samples_per_instance[i];
+    }
+  }
+  
+#pragma omp parallel for
+  for (ptrdiff_t i = 0; i < ptrdiff_t(scene.num_instances); ++i) {
+    size_t sample_offset = sample_offsets[i];
     // Point to samples for this instance
     AOSamples instance_ao_samples;
     instance_ao_samples.num_samples = num_samples_per_instance[i];
@@ -251,8 +262,6 @@ void bake::sample_instances(
 
     optix::Matrix4x4 xform(scene.instances[i].xform);
     sample_instance(scene.meshes[scene.instances[i].mesh_index], xform, (unsigned int)i, min_samples_per_triangle, instance_ao_samples);
-
-    sample_offset += num_samples_per_instance[i];
   }
 }
 
@@ -303,7 +312,8 @@ size_t bake::distribute_samples(
   std::vector<double> area_per_instance(scene.num_instances, 0.0);
   if (num_samples > min_num_samples) {
 
-    for (size_t idx = 0; idx < scene.num_instances; ++idx) {
+    #pragma omp parallel for
+    for (ptrdiff_t idx = 0; idx < ptrdiff_t(scene.num_instances); ++idx) {
       const bake::Mesh& mesh = scene.meshes[scene.instances[idx].mesh_index];
       const optix::Matrix4x4 xform(scene.instances[idx].xform);
       const int3* tri_vertex_indices  = reinterpret_cast<int3*>( mesh.tri_vertex_indices );
