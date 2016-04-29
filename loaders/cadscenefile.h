@@ -24,6 +24,8 @@
 
 #pragma once
 
+#include <cstddef>
+
 #ifdef NOGZLIB
 #define CSF_ZIP_SUPPORT 0
 #else

@@ -23,7 +23,13 @@
 #pragma once
 
 #include <cstddef>
+
+// Note: cstdint would require building with c++11 on gcc
+#if defined(_WIN32)
 #include <cstdint>
+#else
+#include <stdint.h>
+#endif
 
 
 namespace bake
