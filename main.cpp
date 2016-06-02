@@ -92,6 +92,8 @@ struct Config {
     for ( int i = 1; i < argc; ++i ) 
     { 
       std::string arg( argv[i] );
+      if ( arg.empty() ) continue;
+
       if( arg == "-h" || arg == "--help" ) 
       {
         printUsageAndExit( argv[0] ); 
