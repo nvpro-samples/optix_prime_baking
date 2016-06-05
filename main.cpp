@@ -515,6 +515,11 @@ int sample_main( int argc, const char** argv )
   printTimeElapsed( timer ); 
 
   std::cerr << "Total samples: " << total_samples << std::endl;
+  {
+    const int sqrt_num_rays = static_cast<int>( sqrtf( static_cast<float>( config.num_rays ) ) + .5f );
+    std::cerr << "Rays per sample: " << sqrt_num_rays * sqrt_num_rays << std::endl;
+    std::cerr << "Total rays: " << total_samples * sqrt_num_rays * sqrt_num_rays << std::endl;
+  }
 
   //
   // Evaluate AO samples 
