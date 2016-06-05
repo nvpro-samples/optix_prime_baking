@@ -40,6 +40,11 @@
 
 const size_t NUM_RAYS = 64;
 const size_t SAMPLES_PER_FACE = 3;
+const float  GROUND_SCALE = 100.0f;
+const float  GROUND_OFFSET = 0.03f;
+const float  SCENE_OFFSET_SCALE = 0.01f;
+const float  SCENE_MAXDISTANCE_SCALE = 10.0f;
+const float  REGULARIZATION_WEIGHT = 0.1f;
 const char* DEFAULT_BK3DGZ_FILE = "sled_v134.bk3d.gz";
 const char* DEFAULT_BK3D_FILE = "lucy_v134.bk3d";
 #ifdef PROJECT_ABSDIRECTORY
@@ -74,16 +79,16 @@ struct Config {
     min_samples_per_face = SAMPLES_PER_FACE;
     num_rays    = NUM_RAYS; 
     ground_upaxis = 1;
-    ground_scale_factor  = 100.0f;
-    ground_offset_factor = 0.0001f;
-    scene_offset_scale = 0.01f;
-    scene_maxdistance_scale = 10.0f;
+    ground_scale_factor  = GROUND_SCALE;
+    ground_offset_factor = GROUND_OFFSET;
+    scene_offset_scale = SCENE_OFFSET_SCALE;
+    scene_maxdistance_scale = SCENE_MAXDISTANCE_SCALE;
 #ifdef EIGEN3_ENABLED
     filter_mode = bake::VERTEX_FILTER_LEAST_SQUARES;
 #else
     filter_mode = bake::VERTEX_FILTER_AREA_BASED;
 #endif
-    regularization_weight = 0.1f;
+    regularization_weight = REGULARIZATION_WEIGHT;
     use_ground_plane_blocker = true;
     use_viewer = true;
 
@@ -222,13 +227,14 @@ struct Config {
     << "  -r  | --rays    <n>                   Number of rays per sample point for gather (default " << NUM_RAYS << ")\n"
     << "  -s  | --samples <n>                   Number of sample points on mesh (default " << SAMPLES_PER_FACE << " per face; any extra samples are based on area)\n"
     << "  -t  | --samples_per_face <n>          Minimum number of samples per face (default " << SAMPLES_PER_FACE << ")\n"
-    << "  -d  | --ray_distance_scale <s>        Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default 0.01)\n"
-    << "  -m  | --hit_distance_scale <s>        Maximum hit distance to contribute: max distance = maximum scene extent * s. (default 10.0)\n"
-    << "  -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(offset). (default is 1 100.0 0.0001)\n"
+    << "  -d  | --ray_distance_scale <s>        Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default " << SCENE_OFFSET_SCALE << ")\n"
+    << "  -m  | --hit_distance_scale <s>        Maximum hit distance to contribute: max distance = maximum scene extent * s. (default " << SCENE_MAXDISTANCE_SCALE << ")\n"
+    << "  -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(float). "
+    <<                                          " (default 1 " << GROUND_SCALE << " " << GROUND_OFFSET << ")\n"
     << "        --no_ground_plane               Disable virtual ground plane\n"
     << "        --no_viewer                     Disable OpenGL viewer\n"
 #ifdef EIGEN3_ENABLED
-    << "  -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default 0.1)\n"
+    << "  -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default " << REGULARIZATION_WEIGHT << ")\n"
     << "        --no_least_squares              Disable least squares filtering\n"
 #endif
     << std::endl
