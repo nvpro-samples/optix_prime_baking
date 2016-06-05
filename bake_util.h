@@ -46,9 +46,11 @@ void printTimeElapsed( Timer& t );
 
 struct Ray
 {
-  static const RTPbufferformat format = RTP_BUFFER_FORMAT_RAY_ORIGIN_DIRECTION;
+  static const RTPbufferformat format = RTP_BUFFER_FORMAT_RAY_ORIGIN_TMIN_DIRECTION_TMAX;
   float3 origin;
+  float  tmin;
   float3 direction;
+  float  tmax;
 };
 
 

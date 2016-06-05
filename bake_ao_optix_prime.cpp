@@ -151,7 +151,7 @@ void bake::ao_optix_prime(
                       RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );
   scene_model->update( 0 );
 
-  Query   query = scene_model->createQuery( RTP_QUERY_TYPE_ANY );
+  Query query = scene_model->createQuery( RTP_QUERY_TYPE_ANY );
 
   const int sqrt_rays_per_sample = static_cast<int>( sqrtf( static_cast<float>( rays_per_sample ) ) + .5f );
   setup_timer.stop();
@@ -170,6 +170,9 @@ void bake::ao_optix_prime(
   const float scene_scale = std::max( std::max(bbox_max[0] - bbox_min[0],
                                                bbox_max[1] - bbox_min[1]),
                                                bbox_max[2] - bbox_min[2] );
+
+  const float scene_offset = scene_scale * scene_offset_scale;
+  const float scene_maxdistance = scene_scale * scene_maxdistance_scale;
 
   for (size_t batch_idx = 0; batch_idx < num_batches; batch_idx++, seed++) {
 
@@ -205,9 +208,9 @@ void bake::ao_optix_prime(
     for( int i = 0; i < sqrt_rays_per_sample; ++i )
     for( int j = 0; j < sqrt_rays_per_sample; ++j )
     {
-      ACCUM_TIME(raygen_timer,    generateRaysDevice(seed, i, j, sqrt_rays_per_sample, scene_scale * scene_offset_scale, ao_samples_device, rays.ptr()));
+      ACCUM_TIME(raygen_timer,    generateRaysDevice(seed, i, j, sqrt_rays_per_sample, scene_offset, scene_maxdistance, ao_samples_device, rays.ptr()));
       ACCUM_TIME( query_timer,    query->execute( 0 ) );
-      ACCUM_TIME(updateao_timer,  updateAODevice((int)num_samples, scene_scale * scene_maxdistance_scale, hits.ptr(), ao.ptr()));
+      ACCUM_TIME(updateao_timer,  updateAODevice((int)num_samples, hits.ptr(), ao.ptr()));
     }
 
     // copy ao to ao_values

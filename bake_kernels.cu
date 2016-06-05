@@ -50,6 +50,7 @@ void generateRaysKernel(
     const int py,
     const int sqrt_passes,
     const float scene_offset,
+    const float scene_maxdistance,
     const int num_samples,
     const float3* sample_normals,
     const float3* sample_face_normals,
@@ -67,7 +68,7 @@ void generateRaysKernel(
   const float3 sample_norm      = sample_normals[idx]; 
   const float3 sample_face_norm = sample_face_normals[idx];
   const float3 sample_pos       = sample_positions[idx];
-  const float3 ray_origin       = sample_pos + scene_offset * sample_norm;
+  const float3 ray_origin       = sample_pos;
   optix::Onb onb( sample_norm );
 
   float3 ray_dir;
@@ -85,13 +86,16 @@ void generateRaysKernel(
   }
   while( j < 5 && optix::dot( ray_dir, sample_face_norm ) <= 0.0f );
     
-  rays[idx].origin    = ray_origin; 
-  rays[idx].direction = ray_dir;
+  // Reverse shadow rays for better performance.
+  rays[idx].origin    = ray_origin + scene_maxdistance * ray_dir;
+  rays[idx].tmin      = 0.0f;
+  rays[idx].direction = -ray_dir;
+  rays[idx].tmax      = scene_maxdistance - scene_offset;
 
 }
 
 __host__
-void bake::generateRaysDevice(unsigned int seed, int px, int py, int sqrt_passes, float scene_offset, const bake::AOSamples& ao_samples, Ray* rays )
+void bake::generateRaysDevice(unsigned int seed, int px, int py, int sqrt_passes, float scene_offset, float scene_maxdistance, const bake::AOSamples& ao_samples, Ray* rays )
 {
   const int block_size  = 512;                                                           
   const int block_count = idivCeil( (int)ao_samples.num_samples, block_size );                              
@@ -102,6 +106,7 @@ void bake::generateRaysDevice(unsigned int seed, int px, int py, int sqrt_passes
       py,
       sqrt_passes,
       scene_offset,
+      scene_maxdistance,
       (int)ao_samples.num_samples,
       (float3*)ao_samples.sample_normals,
       (float3*)ao_samples.sample_face_normals,
@@ -117,24 +122,24 @@ void bake::generateRaysDevice(unsigned int seed, int px, int py, int sqrt_passes
 //------------------------------------------------------------------------------
 
 __global__
-void updateAOKernel(int num_samples, float maxdistance, const float* hit_data, float* ao_data)
+void updateAOKernel(int num_samples, const float* hit_data, float* ao_data)
 {
   int idx = threadIdx.x + blockIdx.x*blockDim.x;                                 
   if( idx >= num_samples )                                                             
     return;
 
   float distance = hit_data[idx];
-  ao_data[idx] += distance > 0.0 && distance < maxdistance ? 1.0f : 0.0f;
+  ao_data[idx] += distance > 0.0 ? 1.0f : 0.0f;
 }
 
 // Precondition: ao output initialized to 0 before first pass
 __host__
-void bake::updateAODevice( int num_samples, float maxdistance, const float* hits, float* ao )
+void bake::updateAODevice( int num_samples, const float* hits, float* ao )
 {
   int block_size  = 512;                                                           
   int block_count = idivCeil( num_samples, block_size );                              
 
-  updateAOKernel <<<block_count, block_size >>>(num_samples, maxdistance, hits, ao);
+  updateAOKernel <<<block_count, block_size >>>(num_samples, hits, ao);
 }
 
 
