@@ -37,7 +37,9 @@ void make_debug_instances(std::vector<bake::Mesh>& meshes, std::vector<bake::Ins
   const float3 rot_axis = optix::make_float3(0.0f, 1.0f, 0.0f);
   const float scale_factor = 0.9f;
   float scale = scale_factor;
-  const float3 base_translation = 1.01*optix::make_float3(scene_bbox_max[0] - scene_bbox_min[0], 0.0f, 0.0f);
+  const float3 base_translation = optix::make_float3(scene_bbox_max[0] - scene_bbox_min[0], 
+                                                     scene_bbox_max[1] - scene_bbox_min[1], 
+                                                     0.0f);
   float3 translation = scale_factor* base_translation;
 
   const size_t original_num_instances = instances.size();
