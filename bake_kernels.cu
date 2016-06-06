@@ -86,11 +86,20 @@ void generateRaysKernel(
   }
   while( j < 5 && optix::dot( ray_dir, sample_face_norm ) <= 0.0f );
     
-  // Reverse shadow rays for better performance.
+#if 1
+  // Reverse shadow rays for better performance
   rays[idx].origin    = ray_origin + scene_maxdistance * ray_dir;
   rays[idx].tmin      = 0.0f;
   rays[idx].direction = -ray_dir;
-  rays[idx].tmax      = scene_maxdistance - scene_offset;
+  rays[idx].tmax      = scene_maxdistance - scene_offset;  // possible loss of precision here (bignum - smallnum)
+
+#else
+  // Forward shadow rays for better precision
+  rays[idx].origin    = ray_origin;
+  rays[idx].tmin      = scene_offset;
+  rays[idx].direction = ray_dir;
+  rays[idx].tmax      = scene_maxdistance;
+#endif
 
 }
 
