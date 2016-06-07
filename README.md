@@ -5,16 +5,7 @@ optix_prime_baking
 ![Rocket Sled](https://github.com/nvpro-samples/optix_prime_baking/blob/master/doc/sled_multiple_meshes.png)
 
 This sample shows how to precompute ambient occlusion with OptiX Prime, and store it on the
-vertices of a mesh for use during final shading with OpenGL.  The steps are as follows:
-
-  * **Distribute sample points over a mesh**. We place a minimum number of points per triangle, then use area-based sampling for any remaining points.  The total number of samples is a user parameter.
-
-  * **Compute ambient occlusion at the sample points**.  To help limit memory usage, we shoot rays in multiple batches using OptiX Prime.  Each batch has a single jittered ray on a subset of the sample points.  Geometry can be instanced and/or marked as a *blocker* which occludes rays but does not receive sample points of its own.
-
-  * **Resample occlusion from sample points to vertices**.  If the external [Eigen 3](http://eigen.tuxfamily.org) template library was found during CMake configuration, then we use the 
-  filtering method from "Least Squares Vertex Baking" (Kavan et al, EGSR 2011).  Eigen is open source.  In the absence of Eigen support, we use simpler barycentric resampling.  This shows more visual artifacts, especially when the input mesh has large triangles.  A copy of Eigen is included in the "eigen" subdirectory and will be used by default.
-
-  * **Visualize occlusion in OpenGL as a vertex attribute**.
+vertices of a mesh for use during final shading with OpenGL.  
 
 #### Requirements
   * A recent version of Visual Studio (tested with VS 2013 on Windows 7) or gcc (tested with gcc 4.8.4 on Ubuntu 14.04) 
@@ -52,43 +43,33 @@ Quick build instructions:
 7) Click Run in VS, or run the 'nvpro_samples/bin_x64/optix_prime_baking' binary in Linux.
 
 The sample is configured on the command line; use the "-h" flag to list options or check main.cpp.  The options at the time the sample was created are shown below:
-~~~
-App options:
-  -h  | --help                          Print this usage message
-  -f  | --file <scene_file>             Specify model to be rendered (obj, bk3d, bk3d.gz, csf, csf.gz).
-  -o  | --outfile <vertex_ao_file>      Specify raw file where per-instance ao vertices are stored (very basic fileformat).
-  -i  | --instances <n>                 Number of instances per mesh (default 1).  For testing.
-  -r  | --rays    <n>                   Number of rays per sample point for gather (default 64)
-  -s  | --samples <n>                   Number of sample points on mesh (default 3 per face; any extra samples are based on area)
-  -t  | --samples_per_face <n>          Minimum number of samples per face (default 3)
-  -d  | --ray_distance_scale <s>        Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default 0.01)
-  -m  | --hit_distance_scale <s>        Maximum hit distance to contribute:    max distance = maximum scene extent * s. (default 10.0)
-  -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(offset). (default is 1 100.0 0.0001)
-        --no_ground_plane               Disable virtual ground plane
-        --no_viewer                     Disable OpenGL viewer
-  -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default 0.1)
-        --no_least_squares              Disable least squares filtering
- ~~~
+
+    App options:
+      -h  | --help                          Print this usage message
+      -f  | --file <scene_file>             Specify model to be rendered (obj, bk3d, bk3d.gz, csf, csf.gz).
+      -o  | --outfile <vertex_ao_file>      Specify raw file where per-instance ao vertices are stored (very basic fileformat).
+      -i  | --instances <n>                 Number of instances per mesh (default 1).  For testing.
+      -r  | --rays    <n>                   Number of rays per sample point for gather (default 64)
+      -s  | --samples <n>                   Number of sample points on mesh (default 3 per face; any extra samples are based on area)
+      -t  | --samples_per_face <n>          Minimum number of samples per face (default 3)
+      -d  | --ray_distance_scale <s>        Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default 0.01)
+      -m  | --hit_distance_scale <s>        Maximum hit distance to contribute: max distance = maximum scene extent * s. (default 10)
+      -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(float).  (default 1 100 0.03)
+            --no_ground_plane               Disable virtual ground plane
+            --no_viewer                     Disable OpenGL viewer
+      -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default 0.1)
+            --no_least_squares              Disable least squares filtering
+    
+    Viewer keys:
+       e                                    Draw mesh edges on/off
+       f                                    Frame scene
+       q                                    Quit
  
-#### Least Squares Filtering
-
-The effect of filtering on a simplified Lucy model (80k faces) is shown below.  The right image uses least squares filtering (regularization weight 0.1) and is noticeably smoother when the triangles are this large.
-![Lucy Image](https://github.com/nvpro-samples/optix_prime_baking/blob/master/doc/lucy_least_squares_comparison.png)
-
-Mesh detail showing triangle size: 
-![Lucy mesh detail](https://github.com/nvpro-samples/optix_prime_baking/blob/master/doc/lucy_meshlab.png)
-
-#### Instancing
-
-All geometry consists of *instances*, which are pairs of meshes and transforms.  A mesh referenced by multiple instances is only stored once in memory.  For example, the scene below has 3 instances of a mesh with 1.3M triangles, and was baked using less than 1 GB of GPU memory for the scene, rays, etc.  This scene also has an invisible ground plane marked as a *blocker*.
-
-![Instancing Example](https://github.com/nvpro-samples/optix_prime_baking/blob/master/doc/hunter_instances.png)
-
 #### Supported scene formats 
 
 Loaders are provided for OBJ, [Bak3d](https://github.com/tlorach/Bak3d) and CSF (basic cad scene file format used in various nvpro-samples).  The OBJ loader flattens all groups into a single mesh.  The bk3d/csf loaders preserve separate meshes, as shown in the teaser image above of a rocket sled with 109 meshes.  Use the utilities in the Bak3d repo to convert other formats, or write a new loader for your favorite format and add it to the "loaders" subdirectory.
 
-The rocket sled .bk3d file can be downloaded via MODELS_DOWNLOAD_ENABLE in the cmake config.
+The rocket sled .bk3d file is automatically downloaded via MODELS_DOWNLOAD_ENABLE in the cmake config.
 
 #### Output format
 
@@ -109,36 +90,7 @@ The sample uses a very basic format, that allows storage of the per-instance ver
 }
 ~~~
 
-#### Performance
+#### Support
 
-Timings for the sled scene on an NVIDIA Quadro M6000 GPU are shown below, including the optional least squares filtering step which is not GPU accelerated.
-
-~~~
-> ../../../bin_x64/optix_prime_baking -f ../assets/sled_v134.bk3d.gz -w 1
-Load scene ...                 96.27 ms
-Loaded scene: ../assets/sled_v134.bk3d.gz
-	109 meshes, 109 instances
-	uninstanced vertices: 348015
-	uninstanced triangles: 418036
-Minimum samples per face: 3
-Generate sample points ... 
-  117.97 ms
-Total samples: 1254108
-Compute AO ...             
-	setup ...             335.70 ms
-	accum raygen ...        0.17 ms
-	accum query ...       793.83 ms
-	accum update AO ...     0.35 ms
-	copy AO out ...         0.51 ms
- 1142.60 ms
-Map AO to vertices  ...    
-	build mass matrices ...             149.94 ms
-	build regularization matrices ...   403.11 ms
-	decompose matrices ...              265.34 ms
-	solve linear systems ...            10.17 ms
-  829.68 ms
-~~~
-
-
-
+For general OptiX help, please join the NVIDIA Developer Program and download the full [OptiX SDK](https://developer.nvidia.com/optix), then post on the OptiX forums or mailing list.
 
