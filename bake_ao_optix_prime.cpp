@@ -51,10 +51,11 @@ namespace
 
 void createInstances( Context& context,
     const bake::Mesh* meshes, const size_t num_meshes, const bake::Instance* instances, const size_t num_instances, 
+    const bool conserve_memory,
     // output, to keep allocations around
     std::vector<Buffer<float3>* >& allocated_vertex_buffers,
     std::vector<Buffer<int3>* >& allocated_index_buffers,
-    std::vector<Model>& models, std::vector<RTPmodel>& prime_instances, std::vector<optix::Matrix4x4>& transforms )
+    std::vector<Model>& models, std::vector<RTPmodel>& prime_instances, std::vector<optix::Matrix4x4>& transforms)
 {
 
   // For sharing identical buffers between Models
@@ -65,6 +66,10 @@ void createInstances( Context& context,
   models.reserve(models.size() + num_meshes);
   for (size_t meshIdx = 0; meshIdx < num_meshes; ++meshIdx) {
     Model model = context->createModel();
+    if (conserve_memory){
+      model->setBuilderParameter(RTP_BUILDER_PARAM_USE_CALLER_TRIANGLES, 1);
+      model->setBuilderParameter<size_t>(RTP_BUILDER_PARAM_CHUNK_SIZE, 512 * 1024 * 1024);
+    }
     const bake::Mesh& mesh = meshes[meshIdx];
 
     // Allocate or reuse vertex buffer and index buffer
@@ -122,10 +127,10 @@ void bake::ao_optix_prime(
     const Scene& blockers,
     const bake::AOSamples& ao_samples,
     const int rays_per_sample,
-    const float  scene_offset_scale,
-    const float  scene_maxdistance_scale,
-    const float* bbox_min,
-    const float* bbox_max,
+    const float  scene_offset,
+    const float  scene_maxdistance,
+    const bool   cpu_mode,
+    const bool   conserve_memory,
     float* ao_values
     )
 {
@@ -133,17 +138,17 @@ void bake::ao_optix_prime(
   Timer setup_timer;
   setup_timer.start( );
 
-  Context ctx = Context::create( RTP_CONTEXT_TYPE_CUDA );
+  Context ctx = Context::create(cpu_mode ? RTP_CONTEXT_TYPE_CPU : RTP_CONTEXT_TYPE_CUDA);
 
   std::vector<Model> models;
   std::vector<RTPmodel> prime_instances;
   std::vector<optix::Matrix4x4> transforms;
   std::vector< Buffer<float3>* > allocated_vertex_buffers;
   std::vector< Buffer<int3>* > allocated_index_buffers;
-  createInstances( ctx, scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, 
+  createInstances(ctx, scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, conserve_memory,
     allocated_vertex_buffers, allocated_index_buffers, models, prime_instances, transforms );
   if (blockers.num_instances > 0) {
-    createInstances( ctx, blockers.meshes, blockers.num_meshes, blockers.instances, blockers.num_instances, 
+    createInstances(ctx, blockers.meshes, blockers.num_meshes, blockers.instances, blockers.num_instances, conserve_memory,
       allocated_vertex_buffers, allocated_index_buffers, models, prime_instances, transforms ); 
   }
   Model scene_model = ctx->createModel();
@@ -166,13 +171,6 @@ void bake::ao_optix_prime(
   // Split sample points into batches
   const size_t batch_size = 2000000;  // Note: fits on GTX 750 (1 GB) along with Hunter model
   const size_t num_batches = std::max(idivCeil(ao_samples.num_samples, batch_size), size_t(1));
-
-  const float scene_scale = std::max( std::max(bbox_max[0] - bbox_min[0],
-                                               bbox_max[1] - bbox_min[1]),
-                                               bbox_max[2] - bbox_min[2] );
-
-  const float scene_offset = scene_scale * scene_offset_scale;
-  const float scene_maxdistance = scene_scale * scene_maxdistance_scale;
 
   for (size_t batch_idx = 0; batch_idx < num_batches; batch_idx++, seed++) {
 

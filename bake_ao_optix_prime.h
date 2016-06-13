@@ -31,10 +31,10 @@ void ao_optix_prime(
     const Scene&    blockers,
     const AOSamples& ao_samples,
     const int    rays_per_sample,
-    const float  scene_offset_scale,
-    const float  scene_maxdistance_scale,
-    const float* bbox_min,
-    const float* bbox_max,
+    const float  scene_offset,
+    const float  scene_maxdistance,
+    const bool   cpu_mode,
+    const bool   conserve_memory,
     float*  ao_values
     );
 

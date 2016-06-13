@@ -53,13 +53,17 @@ The sample is configured on the command line; use the "-h" flag to list options 
       -s  | --samples <n>                   Number of sample points on mesh (default 3 per face; any extra samples are based on area)
       -t  | --samples_per_face <n>          Minimum number of samples per face (default 3)
       -d  | --ray_distance_scale <s>        Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default 0.01)
+            --ray_distance <s>              Distance offset scale for ray from face: ray offset = s. (overrides scale-based version, used if non zero)
       -m  | --hit_distance_scale <s>        Maximum hit distance to contribute: max distance = maximum scene extent * s. (default 10)
+            --hit_distance <s>              Maximum hit distance to contribute: max distance = s. (overrides scale-based version, used if non zero)
       -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(float).  (default 1 100 0.03)
             --no_ground_plane               Disable virtual ground plane
-            --no_viewer                     Disable OpenGL viewer
       -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default 0.1)
             --no_least_squares              Disable least squares filtering
-    
+            --no_viewer                     Disable OpenGL viewer
+            --no_gpu                        Disable GPU usage in raytracer
+            --conserve_memory               Triggers some internal settings in optix to save memory
+            
     Viewer keys:
        e                                    Draw mesh edges on/off
        f                                    Frame scene

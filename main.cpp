@@ -70,6 +70,10 @@ struct Config {
   float ground_offset_factor;
   float scene_offset_scale;
   float scene_maxdistance_scale;
+  float scene_maxdistance;
+  float scene_offset;
+  bool  use_cpu;
+  bool  conserve_memory;
   std::string output_filename;
 
   Config( int argc, const char ** argv ) {
@@ -83,6 +87,10 @@ struct Config {
     ground_offset_factor = GROUND_OFFSET;
     scene_offset_scale = SCENE_OFFSET_SCALE;
     scene_maxdistance_scale = SCENE_MAXDISTANCE_SCALE;
+    scene_offset = 0; // must default to 0
+    scene_maxdistance = 0;
+    use_cpu = false;
+    conserve_memory = false;
 #ifdef EIGEN3_ENABLED
     filter_mode = bake::VERTEX_FILTER_LEAST_SQUARES;
 #else
@@ -146,6 +154,18 @@ struct Config {
           printParseErrorAndExit(argv[0], arg, argv[i]);
         }
       }
+      else if ((arg == "--ray_distance") && i + 1 < argc)
+      {
+        if (sscanf(argv[++i], "%f", &scene_offset) != 1) {
+          printParseErrorAndExit(argv[0], arg, argv[i]);
+        }
+      }
+      else if ((arg == "--hit_distance") && i + 1 < argc)
+      {
+        if (sscanf(argv[++i], "%f", &scene_maxdistance) != 1) {
+          printParseErrorAndExit(argv[0], arg, argv[i]);
+        }
+      }
       else if ( (arg == "-r" || arg == "--rays") && i+1 < argc )
       {
         if( sscanf( argv[++i], "%d", &num_rays ) != 1 ) {
@@ -169,6 +189,12 @@ struct Config {
       }
       else if ((arg == "--no_viewer")) {
         use_viewer = false;
+      }
+      else if ((arg == "--no_gpu")) {
+        use_cpu = true;
+      }
+      else if ((arg == "--conserve_memory")) {
+        conserve_memory = true;
       }
       else if ( (arg == "--no_least_squares" ) ) {
         filter_mode = bake::VERTEX_FILTER_AREA_BASED;  
@@ -228,11 +254,15 @@ struct Config {
     << "  -s  | --samples <n>                   Number of sample points on mesh (default " << SAMPLES_PER_FACE << " per face; any extra samples are based on area)\n"
     << "  -t  | --samples_per_face <n>          Minimum number of samples per face (default " << SAMPLES_PER_FACE << ")\n"
     << "  -d  | --ray_distance_scale <s>        Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default " << SCENE_OFFSET_SCALE << ")\n"
+    << "        --ray_distance <s>              Distance offset scale for ray from face: ray offset = s. (overrides scale-based version, used if non zero)\n"
     << "  -m  | --hit_distance_scale <s>        Maximum hit distance to contribute: max distance = maximum scene extent * s. (default " << SCENE_MAXDISTANCE_SCALE << ")\n"
+    << "        --hit_distance <s>              Maximum hit distance to contribute: max distance = s. (overrides scale-based version, used if non zero)\n"
     << "  -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(float). "
     <<                                          " (default 1 " << GROUND_SCALE << " " << GROUND_OFFSET << ")\n"
     << "        --no_ground_plane               Disable virtual ground plane\n"
     << "        --no_viewer                     Disable OpenGL viewer\n"
+    << "        --no_gpu                        Disable GPU usage in raytracer\n"
+    << "        --conserve_memory               Triggers some internal settings in optix to save memory\n"
 #ifdef EIGEN3_ENABLED
     << "  -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default " << REGULARIZATION_WEIGHT << ")\n"
     << "        --no_least_squares              Disable least squares filtering\n"
@@ -530,7 +560,24 @@ int sample_main( int argc, const char** argv )
   timer.start();
 
   std::vector<float> ao_values( total_samples );
-  std::fill( ao_values.begin(), ao_values.end(), 0.0f );
+  std::fill(ao_values.begin(), ao_values.end(), 0.0f);
+
+
+  float scene_maxdistance;
+  float scene_offset;
+  {
+    const float scene_scale = std::max(std::max(scene_bbox_max[0] - scene_bbox_min[0],
+                                                scene_bbox_max[1] - scene_bbox_min[1]),
+                                                scene_bbox_max[2] - scene_bbox_min[2]);
+    scene_maxdistance = scene_scale * config.scene_maxdistance_scale;
+    scene_offset = scene_scale * config.scene_offset_scale;
+    if (config.scene_offset){
+      scene_offset = config.scene_offset;
+    }
+    if (config.scene_maxdistance){
+      scene_maxdistance = config.scene_maxdistance;
+    }
+  }
 
   if (config.use_ground_plane_blocker) {
     // Add blocker for ground plane (no surface samples)
@@ -543,9 +590,9 @@ int sample_main( int argc, const char** argv )
       plane_vertices, plane_indices, blocker_meshes, blocker_instances);
     bake::Scene blockers = { &blocker_meshes[0], blocker_meshes.size(), &blocker_instances[0], blocker_instances.size() };
     bake::computeAOWithBlockers(scene, blockers,
-      ao_samples, config.num_rays, config.scene_offset_scale, config.scene_maxdistance_scale, scene_bbox_min, scene_bbox_max, &ao_values[0]);
+      ao_samples, config.num_rays, scene_offset, scene_maxdistance, config.use_cpu, config.conserve_memory, &ao_values[0]);
   } else {
-    bake::computeAO(scene, ao_samples, config.num_rays, config.scene_offset_scale, config.scene_maxdistance_scale, scene_bbox_min, scene_bbox_max, &ao_values[0]);
+    bake::computeAO(scene, ao_samples, config.num_rays, scene_offset, scene_maxdistance, config.use_cpu, config.conserve_memory, &ao_values[0]);
   }
   printTimeElapsed( timer ); 
 
