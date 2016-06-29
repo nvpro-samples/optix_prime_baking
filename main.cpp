@@ -74,6 +74,7 @@ struct Config {
   float scene_offset;
   bool  use_cpu;
   bool  conserve_memory;
+  bool  flip_orientation;
   std::string output_filename;
 
   Config( int argc, const char ** argv ) {
@@ -91,6 +92,7 @@ struct Config {
     scene_maxdistance = 0;
     use_cpu = false;
     conserve_memory = false;
+    flip_orientation = false;
 #ifdef EIGEN3_ENABLED
     filter_mode = bake::VERTEX_FILTER_LEAST_SQUARES;
 #else
@@ -184,6 +186,9 @@ struct Config {
           printParseErrorAndExit(argv[0], arg, argv[i]);
         }
       }
+      else if ((arg == "--flip_orientation")) {
+        flip_orientation = true;
+      }
       else if ( (arg == "--no_ground_plane" ) ) {
         use_ground_plane_blocker = false;
       }
@@ -259,6 +264,7 @@ struct Config {
     << "        --hit_distance <s>              Maximum hit distance to contribute: max distance = s. (overrides scale-based version, used if non zero)\n"
     << "  -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(float). "
     <<                                          " (default 1 " << GROUND_SCALE << " " << GROUND_OFFSET << ")\n"
+    << "        --flip_orientation              Flips model winding and vertex normals (useful for storing two-sided baking results separately)\n"
     << "        --no_ground_plane               Disable virtual ground plane\n"
     << "        --no_viewer                     Disable OpenGL viewer\n"
     << "        --no_gpu                        Disable GPU usage in raytracer\n"
@@ -518,6 +524,23 @@ int sample_main( int argc, const char** argv )
     if (scene.meshes[i].vertex_stride_bytes != scene.meshes[0].vertex_stride_bytes) {
       std::cerr << "Error: all meshes must have the same vertex stride.  Bailing.\n";
       exit(-1);
+    }
+  }
+
+  if (config.flip_orientation){
+    for (size_t m = 0; m < scene.num_meshes; ++m) {
+      bake::Mesh& mesh = scene.meshes[m];
+      for (size_t i = 0; i < mesh.num_triangles; i++){
+        std::swap(mesh.tri_vertex_indices[i * 3 + 0], mesh.tri_vertex_indices[i * 3 + 2]);
+      }
+      if (mesh.normals){
+        size_t stride = mesh.normal_stride_bytes / sizeof(float);
+        for (size_t i = 0; i < mesh.num_vertices; i++){
+          mesh.normals[i * stride + 0] *= -1.0;
+          mesh.normals[i * stride + 1] *= -1.0;
+          mesh.normals[i * stride + 2] *= -1.0;
+        }
+      }
     }
   }
 
