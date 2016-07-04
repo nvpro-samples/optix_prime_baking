@@ -34,6 +34,8 @@
 
 #include <cassert>
 #include <iostream>
+#include <map>
+#include <utility>
 #include <vector>
 #include <optixu/optixu_math_namespace.h>
 
@@ -55,6 +57,8 @@ typedef Eigen::Matrix<ScalarType, 4, 4> Matrix44;
 typedef Eigen::Triplet<ScalarType> Triplet;
 typedef Eigen::Matrix<ScalarType, 3, 1> Vector3;
 typedef Eigen::Matrix<ScalarType, 2, 1> Vector2;
+
+typedef std::map< std::pair<int, int>, ScalarType > TripletMap;
 
 namespace {
 
@@ -191,7 +195,7 @@ void edgeBasedRegularizer(const float* verts, size_t num_verts, unsigned vertex_
   
   size_t skipped = 0;
 
-  std::vector< Triplet > triplets;
+  TripletMap triplet_map;
   size_t edge_index = 0;
   for (EdgeMap::const_iterator it = edges.begin(); it != edges.end(); ++it, ++edge_index) {
     if (it->second.count != 2) {
@@ -220,9 +224,15 @@ void edgeBasedRegularizer(const float* verts, size_t num_verts, unsigned vertex_
     // scatter GDtGD:
     for (int i=0; i < 4; i++) {
       for (int j=0; j < 4; j++) {
-        triplets.push_back(Triplet(vertIdx[i], vertIdx[j], GDtGD(i, j)));
+        triplet_map[ std::make_pair( vertIdx[i], vertIdx[j] ) ] += GDtGD(i, j);
       }
     }
+  }
+
+  std::vector< Triplet > triplets;
+  triplets.reserve(triplet_map.size());
+  for ( TripletMap::const_iterator it = triplet_map.begin(); it != triplet_map.end(); ++it) {
+    triplets.push_back( Triplet( it->first.first, it->first.second, it->second ) );
   }
 
 	regularization_matrix.resize((int)num_verts, (int)num_verts);
@@ -265,9 +275,9 @@ void filter_mesh_least_squares(
 
   mass_matrix_timer.start();
 
-  std::vector< Triplet > triplets;
-  triplets.reserve(ao_samples.num_samples * 9);
   const int3* tri_vertex_indices  = reinterpret_cast<int3*>( mesh.tri_vertex_indices );
+
+  TripletMap triplet_map;
 
   for (size_t i = 0; i < ao_samples.num_samples; ++i) {
     const bake::SampleInfo& info = ao_samples.sample_infos[i];
@@ -281,29 +291,36 @@ void filter_mesh_least_squares(
 
     // Note: the reference paper suggests computing the mass matrix analytically.
     // Building it from samples gave smoother results for low numbers of samples per face.
+  
+    triplet_map[ std::make_pair( tri.x, tri.x ) ] += static_cast<ScalarType>( info.bary[0]*info.bary[0]*info.dA );
+    triplet_map[ std::make_pair( tri.y, tri.y ) ] += static_cast<ScalarType>( info.bary[1]*info.bary[1]*info.dA );
+    triplet_map[ std::make_pair( tri.z, tri.z ) ] += static_cast<ScalarType>( info.bary[2]*info.bary[2]*info.dA );
     
-    triplets.push_back( Triplet( tri.x, tri.x, static_cast<ScalarType>( info.bary[0]*info.bary[0]*info.dA ) ) );
-    triplets.push_back( Triplet( tri.y, tri.y, static_cast<ScalarType>( info.bary[1]*info.bary[1]*info.dA ) ) );
-    triplets.push_back( Triplet( tri.z, tri.z, static_cast<ScalarType>( info.bary[2]*info.bary[2]*info.dA ) ) );
 
     {
       const double elem = static_cast<ScalarType>(info.bary[0]*info.bary[1]*info.dA);
-      triplets.push_back( Triplet( tri.x, tri.y, elem ) );
-      triplets.push_back( Triplet( tri.y, tri.x, elem ) );
+      triplet_map[ std::make_pair( tri.x, tri.y ) ] += elem;
+      triplet_map[ std::make_pair( tri.y, tri.x ) ] += elem;
     }
 
     {
       const double elem = static_cast<ScalarType>(info.bary[1]*info.bary[2]*info.dA);
-      triplets.push_back( Triplet( tri.y, tri.z, elem ) );
-      triplets.push_back( Triplet( tri.z, tri.y, elem ) );
+      triplet_map[ std::make_pair( tri.y, tri.z ) ] += elem;
+      triplet_map[ std::make_pair( tri.z, tri.y ) ] += elem;
     }
 
     {
       const double elem = static_cast<ScalarType>(info.bary[2]*info.bary[0]*info.dA);
-      triplets.push_back( Triplet( tri.x, tri.z, elem ) );
-      triplets.push_back( Triplet( tri.z, tri.x, elem ) );
+      triplet_map[ std::make_pair( tri.x, tri.z ) ] += elem;
+      triplet_map[ std::make_pair( tri.z, tri.x ) ] += elem;
     }
 
+  }
+
+  std::vector< Triplet > triplets;
+  triplets.reserve(triplet_map.size());
+  for ( TripletMap::const_iterator it = triplet_map.begin(); it != triplet_map.end(); ++it) {
+    triplets.push_back( Triplet( it->first.first, it->first.second, it->second ) );
   }
 
   // Mass matrix
