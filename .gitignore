@@ -1,3 +1,4 @@
 build/*
+cmake_build/*
 assets/sled_v134.bk3d.gz
 .p4ignore
