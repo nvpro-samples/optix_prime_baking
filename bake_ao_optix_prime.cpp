@@ -37,8 +37,6 @@
 #include <iostream>
 #include <map>
 
-using namespace optix::prime;
-
 #define ACCUM_TIME( t, x )        \
 do {                              \
   t.start();                      \
@@ -49,13 +47,13 @@ do {                              \
 namespace
 {
 
-void createInstances( Context& context,
+void createInstances( optix::prime::Context& context,
     const bake::Mesh* meshes, const size_t num_meshes, const bake::Instance* instances, const size_t num_instances, 
     const bool conserve_memory,
     // output, to keep allocations around
     std::vector<Buffer<float3>* >& allocated_vertex_buffers,
     std::vector<Buffer<int3>* >& allocated_index_buffers,
-    std::vector<Model>& models, std::vector<RTPmodel>& prime_instances, std::vector<optix::Matrix4x4>& transforms)
+    std::vector<optix::prime::Model>& models, std::vector<RTPmodel>& prime_instances, std::vector<optix::Matrix4x4>& transforms)
 {
 
   // For sharing identical buffers between Models
@@ -65,7 +63,7 @@ void createInstances( Context& context,
   const size_t model_offset = models.size();
   models.reserve(models.size() + num_meshes);
   for (size_t meshIdx = 0; meshIdx < num_meshes; ++meshIdx) {
-    Model model = context->createModel();
+    optix::prime::Model model = context->createModel();
     if (conserve_memory){
       model->setBuilderParameter(RTP_BUILDER_PARAM_USE_CALLER_TRIANGLES, 1);
       model->setBuilderParameter<size_t>(RTP_BUILDER_PARAM_CHUNK_SIZE, 512 * 1024 * 1024);
@@ -138,9 +136,9 @@ void bake::ao_optix_prime(
   Timer setup_timer;
   setup_timer.start( );
 
-  Context ctx = Context::create(cpu_mode ? RTP_CONTEXT_TYPE_CPU : RTP_CONTEXT_TYPE_CUDA);
+  optix::prime::Context ctx = optix::prime::Context::create(cpu_mode ? RTP_CONTEXT_TYPE_CPU : RTP_CONTEXT_TYPE_CUDA);
 
-  std::vector<Model> models;
+  std::vector<optix::prime::Model> models;
   std::vector<RTPmodel> prime_instances;
   std::vector<optix::Matrix4x4> transforms;
   std::vector< Buffer<float3>* > allocated_vertex_buffers;
@@ -151,12 +149,12 @@ void bake::ao_optix_prime(
     createInstances(ctx, blockers.meshes, blockers.num_meshes, blockers.instances, blockers.num_instances, conserve_memory,
       allocated_vertex_buffers, allocated_index_buffers, models, prime_instances, transforms ); 
   }
-  Model scene_model = ctx->createModel();
+  optix::prime::Model scene_model = ctx->createModel();
   scene_model->setInstances( prime_instances.size(), RTP_BUFFER_TYPE_HOST, &prime_instances[0],
                       RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );
   scene_model->update( 0 );
 
-  Query query = scene_model->createQuery( RTP_QUERY_TYPE_ANY );
+  optix::prime::Query query = scene_model->createQuery( RTP_QUERY_TYPE_ANY );
 
   const int sqrt_rays_per_sample = static_cast<int>( sqrtf( static_cast<float>( rays_per_sample ) ) + .5f );
   setup_timer.stop();
