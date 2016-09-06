@@ -73,9 +73,7 @@ if(OPENMP_FOUND)
 endif()
 
 # get binary files that we don't store in github
-SET (MODELS_DOWNLOAD_ENABLE ON CACHE BOOL "Download extra model for optix_prime_baking")
-SET (MODELS_DOWNLOAD_FORCE OFF CACHE BOOL "Force Download extra model for optix_prime_baking.  Requires MODELS_DOWNLOAD to be enabled." )
-if (${MODELS_DOWNLOAD_ENABLE})
+if (NOT ${MODELS_DOWNLOAD_DISABLED})
   set(SCENE_FILES "sled_v134.bk3d.gz")
   _download_files( "${SCENE_FILES}"
                    "http://developer.download.nvidia.com/ProGraphics/nvpro-samples" 

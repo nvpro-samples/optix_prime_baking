@@ -32,7 +32,7 @@ Quick build instructions:
 4) Open CMake-gui (Windows) or ccmake (Linux):
   - Source code to: /nvpro_ samples/build_all
   - Build folder: /nvpro_samples/build_all/build
-  - Optional: toggle MODELS_DOWNLOAD_ENABLE to download extra scenes during the configure step.
+  - Optional: toggle MODELS_DOWNLOAD_DISABLED to download extra scenes during the configure step.
   - Configure and select a compiler if prompted.
   - Generate
 
@@ -73,7 +73,7 @@ The sample is configured on the command line; use the "-h" flag to list options 
 
 Loaders are provided for OBJ, [Bak3d](https://github.com/tlorach/Bak3d) and CSF (basic cad scene file format used in various nvpro-samples).  The OBJ loader flattens all groups into a single mesh.  The bk3d/csf loaders preserve separate meshes, as shown in the teaser image above of a rocket sled with 109 meshes.  Use the utilities in the Bak3d repo to convert other formats, or write a new loader for your favorite format and add it to the "loaders" subdirectory.
 
-The rocket sled .bk3d file is automatically downloaded via MODELS_DOWNLOAD_ENABLE in the cmake config.
+The rocket sled .bk3d file is automatically downloaded depending on MODELS_DOWNLOAD_DISABLED in the cmake config.
 
 #### Output format
 
