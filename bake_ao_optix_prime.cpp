@@ -122,7 +122,6 @@ inline size_t idivCeil( size_t x, size_t y )
 
 void bake::ao_optix_prime(
     const Scene& scene,
-    const Scene& blockers,
     const bake::AOSamples& ao_samples,
     const int rays_per_sample,
     const float  scene_offset,
@@ -145,10 +144,7 @@ void bake::ao_optix_prime(
   std::vector< Buffer<int3>* > allocated_index_buffers;
   createInstances(ctx, scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, conserve_memory,
     allocated_vertex_buffers, allocated_index_buffers, models, prime_instances, transforms );
-  if (blockers.num_instances > 0) {
-    createInstances(ctx, blockers.meshes, blockers.num_meshes, blockers.instances, blockers.num_instances, conserve_memory,
-      allocated_vertex_buffers, allocated_index_buffers, models, prime_instances, transforms ); 
-  }
+  
   optix::prime::Model scene_model = ctx->createModel();
   scene_model->setInstances( prime_instances.size(), RTP_BUFFER_TYPE_HOST, &prime_instances[0],
                       RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );

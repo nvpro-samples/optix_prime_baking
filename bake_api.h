@@ -123,20 +123,6 @@ void computeAO(
     );
 
 
-// This version takes extra "blocker" objects that occlude rays,
-// but do not have any AO samples of their own.
-void computeAOWithBlockers(
-    const Scene&     scene,
-    const Scene&     blockers,
-    const AOSamples& ao_samples,
-    const int        rays_per_sample,
-    const float      scene_offset,
-    const float      scene_maxdistance,
-    const bool       cpu_mode,
-    const bool       conserve_memory,
-    float*           ao_values 
-    );
-
 void mapAOToVertices(
     const Scene&            scene,
     const size_t*           num_samples_per_instance,

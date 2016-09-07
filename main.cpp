@@ -471,6 +471,28 @@ namespace {
     return true;
   }
 
+  // Concat two scenes using shallow copies for all buffers
+  void concat_scenes( const bake::Scene& scene1, const bake::Scene& scene2, 
+    //output
+    bake::Scene& scene, std::vector<bake::Mesh>& meshes, std::vector<bake::Instance>& instances )
+  {
+    // Concat array of meshes
+    for (size_t i = 0; i < scene1.num_meshes; ++i) meshes.push_back( scene1.meshes[i] );
+    for (size_t i = 0; i < scene2.num_meshes; ++i) meshes.push_back( scene2.meshes[i] );
+    scene.num_meshes = scene1.num_meshes + scene2.num_meshes;
+    scene.meshes = &meshes[0];
+
+    // Concat array of instances, with updated mesh offsets
+    for (size_t i = 0; i < scene1.num_instances; ++i) instances.push_back( scene1.instances[i] );
+    for (size_t i = 0; i < scene2.num_instances; ++i) {
+      bake::Instance instance = scene2.instances[i];
+      instance.mesh_index += scene1.num_meshes;
+      instances.push_back( instance );
+    }
+    scene.num_instances = scene1.num_instances + scene2.num_instances;
+    scene.instances = &instances[0];
+  }
+
 }
 
 
@@ -612,10 +634,16 @@ int sample_main( int argc, const char** argv )
       scene.meshes[0].vertex_stride_bytes, 
       plane_vertices, plane_indices, blocker_meshes, blocker_instances);
     bake::Scene blockers = { &blocker_meshes[0], blocker_meshes.size(), &blocker_instances[0], blocker_instances.size() };
-    bake::computeAOWithBlockers(scene, blockers,
+
+    bake::Scene combined_scene;
+    std::vector<bake::Mesh> combined_meshes;
+    std::vector<bake::Instance> combined_instances;
+    concat_scenes( scene, blockers, combined_scene, combined_meshes, combined_instances );
+    bake::computeAO(combined_scene,
       ao_samples, config.num_rays, scene_offset, scene_maxdistance, config.use_cpu, config.conserve_memory, &ao_values[0]);
   } else {
-    bake::computeAO(scene, ao_samples, config.num_rays, scene_offset, scene_maxdistance, config.use_cpu, config.conserve_memory, &ao_values[0]);
+    bake::computeAO(scene, 
+      ao_samples, config.num_rays, scene_offset, scene_maxdistance, config.use_cpu, config.conserve_memory, &ao_values[0]);
   }
   printTimeElapsed( timer ); 
 
