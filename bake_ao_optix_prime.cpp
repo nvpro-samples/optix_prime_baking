@@ -47,6 +47,7 @@ do {                              \
 namespace
 {
 
+#if 0
 void createInstances( optix::prime::Context& context,
     const bake::Mesh* meshes, const size_t num_meshes, const bake::Instance* instances, const size_t num_instances, 
     const bool conserve_memory,
@@ -110,6 +111,78 @@ void createInstances( optix::prime::Context& context,
   }
 
 }
+#endif
+
+optix::prime::Model createPrimeScene( optix::prime::Context& context,
+    const bake::Mesh* meshes, const size_t num_meshes, const bake::Instance* instances, const size_t num_instances, 
+    const bool conserve_memory,
+    // output, to keep allocations around
+    std::vector<Buffer<float3>* >& allocated_vertex_buffers,
+    std::vector<Buffer<int3>* >& allocated_index_buffers,
+    std::vector<optix::prime::Model>& models, std::vector<optix::Matrix4x4>& transforms)
+{
+
+  // For sharing identical buffers between Models
+  std::map< float*, Buffer<float3>* > unique_vertex_buffers;
+  std::map< unsigned int*, Buffer<int3>* > unique_index_buffers;
+
+  models.reserve(models.size() + num_meshes);
+  for (size_t meshIdx = 0; meshIdx < num_meshes; ++meshIdx) {
+    optix::prime::Model model = context->createModel();
+    if (conserve_memory){
+      model->setBuilderParameter(RTP_BUILDER_PARAM_USE_CALLER_TRIANGLES, 1);
+      model->setBuilderParameter<size_t>(RTP_BUILDER_PARAM_CHUNK_SIZE, 512 * 1024 * 1024);
+    }
+    const bake::Mesh& mesh = meshes[meshIdx];
+
+    // Allocate or reuse vertex buffer and index buffer
+
+    Buffer<float3>* vertex_buffer = NULL;
+    if (unique_vertex_buffers.find(mesh.vertices) != unique_vertex_buffers.end()) {
+      vertex_buffer = unique_vertex_buffers.find(mesh.vertices)->second;
+    } else {
+      // Note: copy disabled for Buffer, so need pointer here
+      vertex_buffer = new Buffer<float3>( mesh.num_vertices, RTP_BUFFER_TYPE_CUDA_LINEAR, UNLOCKED, mesh.vertex_stride_bytes );
+      cudaMemcpy( vertex_buffer->ptr(), mesh.vertices, vertex_buffer->sizeInBytes(), cudaMemcpyHostToDevice );
+      unique_vertex_buffers[mesh.vertices] = vertex_buffer;
+      allocated_vertex_buffers.push_back(vertex_buffer);
+    }
+    
+    Buffer<int3>* index_buffer = NULL;
+    if (unique_index_buffers.find(mesh.tri_vertex_indices) != unique_index_buffers.end()) {
+      index_buffer = unique_index_buffers.find(mesh.tri_vertex_indices)->second;
+    } else {
+      index_buffer = new Buffer<int3>( mesh.num_triangles, RTP_BUFFER_TYPE_CUDA_LINEAR );
+      cudaMemcpy( index_buffer->ptr(), mesh.tri_vertex_indices, index_buffer->sizeInBytes(), cudaMemcpyHostToDevice );
+      unique_index_buffers[mesh.tri_vertex_indices] = index_buffer;
+      allocated_index_buffers.push_back(index_buffer);
+    }
+
+    model->setTriangles(
+        index_buffer->count(), index_buffer->type(), index_buffer->ptr(),
+        vertex_buffer->count(), vertex_buffer->type(), vertex_buffer->ptr(), vertex_buffer->stride()
+        );
+    model->update( 0 );
+    models.push_back(model);  // Model is ref counted, so need to return it to prevent destruction
+  }
+
+  std::vector<RTPmodel> prime_instances;
+  prime_instances.reserve(num_instances);
+  for (int i = 0; i < num_instances; ++i) {
+    const size_t index = instances[i].mesh_index;
+    RTPmodel rtp_model = models[index]->getRTPmodel();
+    prime_instances.push_back(rtp_model);
+    transforms.push_back(optix::Matrix4x4(instances[i].xform));
+  }
+
+  optix::prime::Model scene_model = context->createModel();
+  scene_model->setInstances( prime_instances.size(), RTP_BUFFER_TYPE_HOST, &prime_instances[0],
+                      RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );
+  scene_model->update( 0 );
+
+  return scene_model;
+}
+
 
 inline size_t idivCeil( size_t x, size_t y )                                              
 {                                                                                
@@ -138,19 +211,14 @@ void bake::ao_optix_prime(
   optix::prime::Context ctx = optix::prime::Context::create(cpu_mode ? RTP_CONTEXT_TYPE_CPU : RTP_CONTEXT_TYPE_CUDA);
 
   std::vector<optix::prime::Model> models;
-  std::vector<RTPmodel> prime_instances;
   std::vector<optix::Matrix4x4> transforms;
   std::vector< Buffer<float3>* > allocated_vertex_buffers;
   std::vector< Buffer<int3>* > allocated_index_buffers;
-  createInstances(ctx, scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, conserve_memory,
-    allocated_vertex_buffers, allocated_index_buffers, models, prime_instances, transforms );
   
-  optix::prime::Model scene_model = ctx->createModel();
-  scene_model->setInstances( prime_instances.size(), RTP_BUFFER_TYPE_HOST, &prime_instances[0],
-                      RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );
-  scene_model->update( 0 );
+  optix::prime::Model prime_scene = createPrimeScene( ctx, scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, conserve_memory,
+    allocated_vertex_buffers, allocated_index_buffers, models, transforms );
 
-  optix::prime::Query query = scene_model->createQuery( RTP_QUERY_TYPE_ANY );
+  optix::prime::Query query = prime_scene->createQuery( RTP_QUERY_TYPE_ANY );
 
   const int sqrt_rays_per_sample = static_cast<int>( sqrtf( static_cast<float>( rays_per_sample ) ) + .5f );
   setup_timer.stop();
