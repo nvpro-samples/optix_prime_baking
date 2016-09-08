@@ -151,4 +151,28 @@ void bake::updateAODevice( int num_samples, const float* hits, float* ao )
   updateAOKernel <<<block_count, block_size >>>(num_samples, hits, ao);
 }
 
+//------------------------------------------------------------------------------
+//
+// AO normalize-and-invert kernel
+// 
+//------------------------------------------------------------------------------
+
+__global__
+void normalizeAOKernel(int num_samples, float* ao_data, int rays_per_sample)
+{
+  int idx = threadIdx.x + blockIdx.x*blockDim.x;                                 
+  if( idx >= num_samples )                                                             
+    return;
+
+  ao_data[idx] = 1.0f - ao_data[idx] / rays_per_sample;
+}
+
+__host__
+void bake::normalizeAODevice( int num_samples, float* ao, int rays_per_sample )
+{
+  int block_size  = 512;                                                           
+  int block_count = idivCeil( num_samples, block_size );                              
+
+  normalizeAOKernel <<<block_count, block_size >>>(num_samples, ao, rays_per_sample);
+}
 

@@ -33,5 +33,6 @@ struct AOSamples;
 
 void generateRaysDevice(unsigned int seed, int px, int py, int sqrt_passes, float scene_offset, float scene_maxdistance, const bake::AOSamples& ao_samples, Ray* rays );
 void updateAODevice( int num_samples, const float* hits, float* ao );
+void normalizeAODevice( int num_samples, float* ao, int rays_per_sample );
 
 }

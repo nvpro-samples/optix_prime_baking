@@ -47,136 +47,131 @@ do {                              \
 namespace
 {
 
-#if 0
-void createInstances( optix::prime::Context& context,
+
+// For scoping Prime data that needs to stay around during queries
+struct PrimeSceneData {
+
+  std::vector<Buffer<float3>* > vertex_buffers;  // pointers since Buffers can't be copied
+  std::vector<Buffer<int3>* >   index_buffers;
+  std::vector<optix::prime::Model> models;
+
+  virtual ~PrimeSceneData() {
+    // clean up Buffer pointers.
+    for (size_t i = 0; i < vertex_buffers.size(); ++i) {
+      delete vertex_buffers[i];
+    }
+    vertex_buffers.clear();
+    for (size_t i = 0; i < index_buffers.size(); ++i) {
+      delete index_buffers[i];
+    }
+    index_buffers.clear();
+  }
+};
+
+
+// Build and return a two-level Prime scene that is ready for ray queries.
+
+optix::prime::Model createPrimeScene( optix::prime::Context& context, const RTPcontexttype context_type,
     const bake::Mesh* meshes, const size_t num_meshes, const bake::Instance* instances, const size_t num_instances, 
     const bool conserve_memory,
-    // output, to keep allocations around
-    std::vector<Buffer<float3>* >& allocated_vertex_buffers,
-    std::vector<Buffer<int3>* >& allocated_index_buffers,
-    std::vector<optix::prime::Model>& models, std::vector<RTPmodel>& prime_instances, std::vector<optix::Matrix4x4>& transforms)
+    // output
+    PrimeSceneData& psd )
 {
 
-  // For sharing identical buffers between Models
-  std::map< float*, Buffer<float3>* > unique_vertex_buffers;
-  std::map< unsigned int*, Buffer<int3>* > unique_index_buffers;
+  // Create one Prime model per input mesh.  Each of these models will have its own accel structure; this is the lower
+  // level of a two-level scene hierarchy.
 
-  const size_t model_offset = models.size();
-  models.reserve(models.size() + num_meshes);
+  psd.models.reserve( num_meshes );
   for (size_t meshIdx = 0; meshIdx < num_meshes; ++meshIdx) {
     optix::prime::Model model = context->createModel();
     if (conserve_memory){
       model->setBuilderParameter(RTP_BUILDER_PARAM_USE_CALLER_TRIANGLES, 1);
       model->setBuilderParameter<size_t>(RTP_BUILDER_PARAM_CHUNK_SIZE, 512 * 1024 * 1024);
     }
-    const bake::Mesh& mesh = meshes[meshIdx];
+    psd.models.push_back(model);
 
-    // Allocate or reuse vertex buffer and index buffer
-
-    Buffer<float3>* vertex_buffer = NULL;
-    if (unique_vertex_buffers.find(mesh.vertices) != unique_vertex_buffers.end()) {
-      vertex_buffer = unique_vertex_buffers.find(mesh.vertices)->second;
-    } else {
-      // Note: copy disabled for Buffer, so need pointer here
-      vertex_buffer = new Buffer<float3>( mesh.num_vertices, RTP_BUFFER_TYPE_CUDA_LINEAR, UNLOCKED, mesh.vertex_stride_bytes );
-      cudaMemcpy( vertex_buffer->ptr(), mesh.vertices, vertex_buffer->sizeInBytes(), cudaMemcpyHostToDevice );
-      unique_vertex_buffers[mesh.vertices] = vertex_buffer;
-      allocated_vertex_buffers.push_back(vertex_buffer);
-    }
-    
-    Buffer<int3>* index_buffer = NULL;
-    if (unique_index_buffers.find(mesh.tri_vertex_indices) != unique_index_buffers.end()) {
-      index_buffer = unique_index_buffers.find(mesh.tri_vertex_indices)->second;
-    } else {
-      index_buffer = new Buffer<int3>( mesh.num_triangles, RTP_BUFFER_TYPE_CUDA_LINEAR );
-      cudaMemcpy( index_buffer->ptr(), mesh.tri_vertex_indices, index_buffer->sizeInBytes(), cudaMemcpyHostToDevice );
-      unique_index_buffers[mesh.tri_vertex_indices] = index_buffer;
-      allocated_index_buffers.push_back(index_buffer);
-    }
-
-    model->setTriangles(
-        index_buffer->count(), index_buffer->type(), index_buffer->ptr(),
-        vertex_buffer->count(), vertex_buffer->type(), vertex_buffer->ptr(), vertex_buffer->stride()
-        );
-    model->update( 0 );
-    models.push_back(model);  // Model is ref counted, so need to return it to prevent destruction
+    // Delay building accels until we connect buffers below
   }
 
-  prime_instances.reserve(prime_instances.size() + num_instances);
-  for (int i = 0; i < num_instances; ++i) {
-    const size_t index = model_offset + instances[i].mesh_index;
-    RTPmodel rtp_model = models[index]->getRTPmodel();
-    prime_instances.push_back(rtp_model);
-    transforms.push_back(optix::Matrix4x4(instances[i].xform));
+  if ( context_type == RTP_CONTEXT_TYPE_CUDA ) {
+
+    // Create device buffers for vertices and indices.  We could let Prime handle this copy, 
+    // but doing it ourselves preserves any sharing of buffers between meshes, e.g. from bak3d file format.
+
+    std::map< float*, Buffer<float3>* > unique_vertex_buffers;
+    std::map< unsigned int*, Buffer<int3>* > unique_index_buffers;
+
+    for (size_t meshIdx = 0; meshIdx < num_meshes; ++meshIdx) {
+      
+      const bake::Mesh& mesh = meshes[meshIdx];
+
+      // Verts
+      Buffer<float3>* vertex_buffer = NULL;
+      if (unique_vertex_buffers.find(mesh.vertices) != unique_vertex_buffers.end()) {
+        vertex_buffer = unique_vertex_buffers.find(mesh.vertices)->second;
+      } else {
+        vertex_buffer = new Buffer<float3>( mesh.num_vertices, RTP_BUFFER_TYPE_CUDA_LINEAR, UNLOCKED, mesh.vertex_stride_bytes );
+        cudaMemcpy( vertex_buffer->ptr(), mesh.vertices, vertex_buffer->sizeInBytes(), cudaMemcpyHostToDevice );
+        unique_vertex_buffers[mesh.vertices] = vertex_buffer;
+
+        // Don't leak the buffer
+        psd.vertex_buffers.push_back(vertex_buffer);
+      }
+      
+      // Indices
+      Buffer<int3>* index_buffer = NULL;
+      if (unique_index_buffers.find(mesh.tri_vertex_indices) != unique_index_buffers.end()) {
+        index_buffer = unique_index_buffers.find(mesh.tri_vertex_indices)->second;
+      } else {
+        index_buffer = new Buffer<int3>( mesh.num_triangles, RTP_BUFFER_TYPE_CUDA_LINEAR );
+        cudaMemcpy( index_buffer->ptr(), mesh.tri_vertex_indices, index_buffer->sizeInBytes(), cudaMemcpyHostToDevice );
+        unique_index_buffers[mesh.tri_vertex_indices] = index_buffer;
+        psd.index_buffers.push_back(index_buffer);
+      }
+
+      // Connect device buffers to model
+      psd.models[meshIdx]->setTriangles(
+          index_buffer->count(), index_buffer->type(), index_buffer->ptr(),
+          vertex_buffer->count(), vertex_buffer->type(), vertex_buffer->ptr(), vertex_buffer->stride()
+          );
+
+      // Build the accel on the device.  This is a blocking call.
+      psd.models[meshIdx]->update( 0 );
+    }
+
+  } else {
+    // CPU context: just hand Prime the pointers we already have, no need for another copy
+    for (size_t meshIdx = 0; meshIdx < num_meshes; ++meshIdx) {
+
+      const bake::Mesh& mesh = meshes[meshIdx];
+
+      // Connect host buffers to model
+      psd.models[meshIdx]->setTriangles(
+          mesh.num_triangles, RTP_BUFFER_TYPE_HOST, mesh.tri_vertex_indices,
+          mesh.num_vertices,  RTP_BUFFER_TYPE_HOST, mesh.vertices, mesh.vertex_stride_bytes
+          );
+
+      // Build the accel on the host.
+      psd.models[meshIdx]->update( 0 );
+
+    }
   }
 
-}
-#endif
+  // The lower level of the scene hierarchy is done, now build the upper level of instances.
 
-optix::prime::Model createPrimeScene( optix::prime::Context& context,
-    const bake::Mesh* meshes, const size_t num_meshes, const bake::Instance* instances, const size_t num_instances, 
-    const bool conserve_memory,
-    // output, to keep allocations around
-    std::vector<Buffer<float3>* >& allocated_vertex_buffers,
-    std::vector<Buffer<int3>* >& allocated_index_buffers,
-    std::vector<optix::prime::Model>& models, std::vector<optix::Matrix4x4>& transforms)
-{
-
-  // For sharing identical buffers between Models
-  std::map< float*, Buffer<float3>* > unique_vertex_buffers;
-  std::map< unsigned int*, Buffer<int3>* > unique_index_buffers;
-
-  models.reserve(models.size() + num_meshes);
-  for (size_t meshIdx = 0; meshIdx < num_meshes; ++meshIdx) {
-    optix::prime::Model model = context->createModel();
-    if (conserve_memory){
-      model->setBuilderParameter(RTP_BUILDER_PARAM_USE_CALLER_TRIANGLES, 1);
-      model->setBuilderParameter<size_t>(RTP_BUILDER_PARAM_CHUNK_SIZE, 512 * 1024 * 1024);
-    }
-    const bake::Mesh& mesh = meshes[meshIdx];
-
-    // Allocate or reuse vertex buffer and index buffer
-
-    Buffer<float3>* vertex_buffer = NULL;
-    if (unique_vertex_buffers.find(mesh.vertices) != unique_vertex_buffers.end()) {
-      vertex_buffer = unique_vertex_buffers.find(mesh.vertices)->second;
-    } else {
-      // Note: copy disabled for Buffer, so need pointer here
-      vertex_buffer = new Buffer<float3>( mesh.num_vertices, RTP_BUFFER_TYPE_CUDA_LINEAR, UNLOCKED, mesh.vertex_stride_bytes );
-      cudaMemcpy( vertex_buffer->ptr(), mesh.vertices, vertex_buffer->sizeInBytes(), cudaMemcpyHostToDevice );
-      unique_vertex_buffers[mesh.vertices] = vertex_buffer;
-      allocated_vertex_buffers.push_back(vertex_buffer);
-    }
-    
-    Buffer<int3>* index_buffer = NULL;
-    if (unique_index_buffers.find(mesh.tri_vertex_indices) != unique_index_buffers.end()) {
-      index_buffer = unique_index_buffers.find(mesh.tri_vertex_indices)->second;
-    } else {
-      index_buffer = new Buffer<int3>( mesh.num_triangles, RTP_BUFFER_TYPE_CUDA_LINEAR );
-      cudaMemcpy( index_buffer->ptr(), mesh.tri_vertex_indices, index_buffer->sizeInBytes(), cudaMemcpyHostToDevice );
-      unique_index_buffers[mesh.tri_vertex_indices] = index_buffer;
-      allocated_index_buffers.push_back(index_buffer);
-    }
-
-    model->setTriangles(
-        index_buffer->count(), index_buffer->type(), index_buffer->ptr(),
-        vertex_buffer->count(), vertex_buffer->type(), vertex_buffer->ptr(), vertex_buffer->stride()
-        );
-    model->update( 0 );
-    models.push_back(model);  // Model is ref counted, so need to return it to prevent destruction
-  }
-
-  std::vector<RTPmodel> prime_instances;
-  prime_instances.reserve(num_instances);
+  std::vector<RTPmodel> rtp_models;
+  std::vector<optix::Matrix4x4> transforms;
+  rtp_models.reserve(num_instances);
+  transforms.reserve(num_instances);
   for (int i = 0; i < num_instances; ++i) {
     const size_t index = instances[i].mesh_index;
-    RTPmodel rtp_model = models[index]->getRTPmodel();
-    prime_instances.push_back(rtp_model);
+    RTPmodel rtp_model = psd.models[index]->getRTPmodel();
+    rtp_models.push_back(rtp_model);
     transforms.push_back(optix::Matrix4x4(instances[i].xform));
   }
 
   optix::prime::Model scene_model = context->createModel();
-  scene_model->setInstances( prime_instances.size(), RTP_BUFFER_TYPE_HOST, &prime_instances[0],
+  scene_model->setInstances( rtp_models.size(), RTP_BUFFER_TYPE_HOST, &rtp_models[0],
                       RTP_BUFFER_FORMAT_TRANSFORM_FLOAT4x4, RTP_BUFFER_TYPE_HOST, &transforms[0] );
   scene_model->update( 0 );
 
@@ -208,15 +203,12 @@ void bake::ao_optix_prime(
   Timer setup_timer;
   setup_timer.start( );
 
-  optix::prime::Context ctx = optix::prime::Context::create(cpu_mode ? RTP_CONTEXT_TYPE_CPU : RTP_CONTEXT_TYPE_CUDA);
+  const RTPcontexttype context_type = cpu_mode ? RTP_CONTEXT_TYPE_CPU : RTP_CONTEXT_TYPE_CUDA;
+  optix::prime::Context ctx = optix::prime::Context::create( context_type );
 
-  std::vector<optix::prime::Model> models;
-  std::vector<optix::Matrix4x4> transforms;
-  std::vector< Buffer<float3>* > allocated_vertex_buffers;
-  std::vector< Buffer<int3>* > allocated_index_buffers;
-  
-  optix::prime::Model prime_scene = createPrimeScene( ctx, scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, conserve_memory,
-    allocated_vertex_buffers, allocated_index_buffers, models, transforms );
+  PrimeSceneData psd;
+
+  optix::prime::Model prime_scene = createPrimeScene( ctx, context_type, scene.meshes, scene.num_meshes, scene.instances, scene.num_instances, conserve_memory, psd );
 
   optix::prime::Query query = prime_scene->createQuery( RTP_QUERY_TYPE_ANY );
 
@@ -230,7 +222,7 @@ void bake::ao_optix_prime(
 
   unsigned seed = 0;
 
-  // Split sample points into batches
+  // Split sample points into batches to help limit device memory usage.
   const size_t batch_size = 2000000;  // Note: fits on GTX 750 (1 GB) along with Hunter model
   const size_t num_batches = std::max(idivCeil(ao_samples.num_samples, batch_size), size_t(1));
 
@@ -240,7 +232,7 @@ void bake::ao_optix_prime(
     const size_t sample_offset = batch_idx*batch_size;
     const size_t num_samples = std::min(batch_size, ao_samples.num_samples - sample_offset);
 
-    // Copy all necessary data to device
+    // Copy sample points to device
     Buffer<float3> sample_normals     ( num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
     Buffer<float3> sample_face_normals( num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
     Buffer<float3> sample_positions   ( num_samples, RTP_BUFFER_TYPE_CUDA_LINEAR );
@@ -269,32 +261,21 @@ void bake::ao_optix_prime(
     for( int j = 0; j < sqrt_rays_per_sample; ++j )
     {
       ACCUM_TIME(raygen_timer,    generateRaysDevice(seed, i, j, sqrt_rays_per_sample, scene_offset, scene_maxdistance, ao_samples_device, rays.ptr()));
+
+      // Host or device, depending on Prime context type.  For a host context, which we assume is rare, Prime will copy the rays from device to host.
       ACCUM_TIME( query_timer,    query->execute( 0 ) );
+
       ACCUM_TIME(updateao_timer,  updateAODevice((int)num_samples, hits.ptr(), ao.ptr()));
     }
 
-    // copy ao to ao_values
+    ACCUM_TIME(updateao_timer, normalizeAODevice((int)num_samples, ao.ptr(), rays_per_sample));
+
+    // copy AO values back to host
     copyao_timer.start();
     cudaMemcpy( &ao_values[sample_offset], ao.ptr(), ao.sizeInBytes(), cudaMemcpyDeviceToHost ); 
     copyao_timer.stop();
   }
-
-  // normalize
-  for( size_t  i = 0; i < ao_samples.num_samples; ++i ) {
-    ao_values[i] = 1.0f - ao_values[i] / rays_per_sample; 
-  }
-
-  // clean up Buffer pointers.  Could be avoided with unique_ptr.
-  for (size_t i = 0; i < allocated_vertex_buffers.size(); ++i) {
-    delete allocated_vertex_buffers[i];
-  }
-  allocated_vertex_buffers.clear();
-  for (size_t i = 0; i < allocated_index_buffers.size(); ++i) {
-    delete allocated_index_buffers[i];
-  }
-  allocated_index_buffers.clear();
-
-
+  
   std::cerr << "\n\tsetup ...           ";  printTimeElapsed( setup_timer );
   std::cerr << "\taccum raygen ...    ";  printTimeElapsed( raygen_timer );
   std::cerr << "\taccum query ...     ";  printTimeElapsed( query_timer );
