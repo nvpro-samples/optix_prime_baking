@@ -6,7 +6,7 @@ optix_prime_baking
 
 This sample shows how to precompute ambient occlusion with OptiX Prime, and store it on the
 vertices of a mesh for use during final shading with OpenGL.  Also see the accompanying 
-[https://developer.nvidia.com/optix-prime-baking-sample](Gameworks blog article).
+[Gameworks blog article](https://developer.nvidia.com/optix-prime-baking-sample).
 
 #### Requirements
   * A recent version of Visual Studio (tested with VS 2013 on Windows 7) or gcc (tested with gcc 4.8.4 on Ubuntu 14.04) 
