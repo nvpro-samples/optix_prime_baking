@@ -88,7 +88,7 @@ struct vertex_index {
 // for std::map
 struct compare_vertices {
   public:
-  inline bool operator()(const vertex_index &a, const vertex_index &b) {
+  inline bool operator()(const vertex_index &a, const vertex_index &b) const {
     if (a.v_idx != b.v_idx) {
       return (a.v_idx < b.v_idx);
     }
