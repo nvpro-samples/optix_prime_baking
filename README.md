@@ -12,7 +12,7 @@ vertices of a mesh for use during final shading with OpenGL.  Also see the accom
   * A recent version of Visual Studio (tested with VS 2013 on Windows 7) or gcc (tested with gcc 4.8.4 on Ubuntu 14.04) 
   * CUDA 7.5+ and matching driver with supported GPU.
   * A recent version of CMake (tested with 3.11.0).
-  * OptiX 3.9.0 from the shared_optix git repo (see below).  If you have a Pascal or newer gpu, you will need to install a more recent version OptiX SDK separately.
+  * OptiX 3.9.0 from the shared_optix git repo (see below).  If you have a Pascal or newer gpu, you will need to install a more recent OptiX SDK separately.
   * On Linux, [GLFW](http://www.glfw.org/) (tested with 3.2.0).
 
 #### How to Build & Run
