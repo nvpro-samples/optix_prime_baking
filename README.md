@@ -11,17 +11,19 @@ vertices of a mesh for use during final shading with OpenGL.  Also see the accom
 #### Requirements
   * A recent version of Visual Studio (tested with VS 2013 on Windows 7) or gcc (tested with gcc 4.8.4 on Ubuntu 14.04) 
   * CUDA 7.5+ and matching driver with supported GPU.
-  * A recent version of CMake (tested with 2.8.12).
-  * OptiX 3.9.0 from the shared_optix git repo (see below).  No separate install of OptiX is needed.
+  * A recent version of CMake (tested with 3.11.0).
+  * OptiX 3.9.0 from the shared_optix git repo (see below).  If you have a Pascal or newer gpu, you will need to install a more recent version OptiX SDK separately.
   * On Linux, [GLFW](http://www.glfw.org/) (tested with 3.2.0).
 
 #### How to Build & Run
 
 Quick build instructions:
 
+Optional: Download and install the latest version of the [OptiX SDK](https://developer.nvidia.com/optix)
+
 1) Clone the following nvpro-samples repositories:
   - //github.com/nvpro-samples/build_all.git
-  - //github.com/nvpro-samples/shared_optix.git
+  - //github.com/nvpro-samples/shared_optix.git *(skip this if you already installed the OptiX SDK separately)*
   - //github.com/nvpro-samples/shared_sources.git
   - //github.com/nvpro-samples/shared_external.git
   - //github.com/nvpro-samples/optix_prime_baking.git
@@ -33,6 +35,7 @@ Quick build instructions:
 4) Open CMake-gui (Windows) or ccmake (Linux):
   - Source code to: /nvpro_ samples/build_all
   - Build folder: /nvpro_samples/build_all/build
+  - Optional: set OPTIX_LOCATION to an external install of the OptiX SDK.  Remove or hide any existing "shared_optix" directory.
   - Optional: toggle MODELS_DOWNLOAD_DISABLED to download extra scenes during the configure step.
   - Configure and select a compiler if prompted.
   - Generate
