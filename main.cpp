@@ -1,25 +1,29 @@
-/*-----------------------------------------------------------------------
-  Copyright (c) 2015-2016, NVIDIA. All rights reserved.
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
-   * Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
-   * Neither the name of its contributors may be used to endorse 
-     or promote products derived from this software without specific
-     prior written permission.
-  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
-  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-  PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
-  CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-  EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
-  OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
------------------------------------------------------------------------*/
+/* Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *  * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *  * Neither the name of NVIDIA CORPORATION nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+ * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include "bake_api.h"
 #include "bake_view.h"
@@ -40,11 +44,6 @@
 
 const size_t NUM_RAYS = 64;
 const size_t SAMPLES_PER_FACE = 3;
-const float  GROUND_SCALE = 100.0f;
-const float  GROUND_OFFSET = 0.03f;
-const float  SCENE_OFFSET_SCALE = 0.01f;
-const float  SCENE_MAXDISTANCE_SCALE = 1.1f;
-const float  REGULARIZATION_WEIGHT = 0.1f;
 const char* DEFAULT_BK3DGZ_FILE = "sled_v134.bk3d.gz";
 const char* DEFAULT_BK3D_FILE = "lucy_v134.bk3d";
 #ifdef PROJECT_ABSDIRECTORY
@@ -70,11 +69,6 @@ struct Config {
   float ground_offset_factor;
   float scene_offset_scale;
   float scene_maxdistance_scale;
-  float scene_maxdistance;
-  float scene_offset;
-  bool  use_cpu;
-  bool  conserve_memory;
-  bool  flip_orientation;
   std::string output_filename;
 
   Config( int argc, const char ** argv ) {
@@ -84,21 +78,16 @@ struct Config {
     min_samples_per_face = SAMPLES_PER_FACE;
     num_rays    = NUM_RAYS; 
     ground_upaxis = 1;
-    ground_scale_factor  = GROUND_SCALE;
-    ground_offset_factor = GROUND_OFFSET;
-    scene_offset_scale = SCENE_OFFSET_SCALE;
-    scene_maxdistance_scale = SCENE_MAXDISTANCE_SCALE;
-    scene_offset = 0; // must default to 0
-    scene_maxdistance = 0;
-    use_cpu = false;
-    conserve_memory = false;
-    flip_orientation = false;
+    ground_scale_factor  = 100.0f;
+    ground_offset_factor = 0.0001f;
+    scene_offset_scale = 0.01f;
+    scene_maxdistance_scale = 10.0f;
 #ifdef EIGEN3_ENABLED
     filter_mode = bake::VERTEX_FILTER_LEAST_SQUARES;
 #else
     filter_mode = bake::VERTEX_FILTER_AREA_BASED;
 #endif
-    regularization_weight = REGULARIZATION_WEIGHT;
+    regularization_weight = 0.1f;
     use_ground_plane_blocker = true;
     use_viewer = true;
 
@@ -156,18 +145,6 @@ struct Config {
           printParseErrorAndExit(argv[0], arg, argv[i]);
         }
       }
-      else if ((arg == "--ray_distance") && i + 1 < argc)
-      {
-        if (sscanf(argv[++i], "%f", &scene_offset) != 1) {
-          printParseErrorAndExit(argv[0], arg, argv[i]);
-        }
-      }
-      else if ((arg == "--hit_distance") && i + 1 < argc)
-      {
-        if (sscanf(argv[++i], "%f", &scene_maxdistance) != 1) {
-          printParseErrorAndExit(argv[0], arg, argv[i]);
-        }
-      }
       else if ( (arg == "-r" || arg == "--rays") && i+1 < argc )
       {
         if( sscanf( argv[++i], "%d", &num_rays ) != 1 ) {
@@ -186,20 +163,11 @@ struct Config {
           printParseErrorAndExit(argv[0], arg, argv[i]);
         }
       }
-      else if ((arg == "--flip_orientation")) {
-        flip_orientation = true;
-      }
       else if ( (arg == "--no_ground_plane" ) ) {
         use_ground_plane_blocker = false;
       }
       else if ((arg == "--no_viewer")) {
         use_viewer = false;
-      }
-      else if ((arg == "--no_gpu")) {
-        use_cpu = true;
-      }
-      else if ((arg == "--conserve_memory")) {
-        conserve_memory = true;
       }
       else if ( (arg == "--no_least_squares" ) ) {
         filter_mode = bake::VERTEX_FILTER_AREA_BASED;  
@@ -258,19 +226,13 @@ struct Config {
     << "  -r  | --rays    <n>                   Number of rays per sample point for gather (default " << NUM_RAYS << ")\n"
     << "  -s  | --samples <n>                   Number of sample points on mesh (default " << SAMPLES_PER_FACE << " per face; any extra samples are based on area)\n"
     << "  -t  | --samples_per_face <n>          Minimum number of samples per face (default " << SAMPLES_PER_FACE << ")\n"
-    << "  -d  | --ray_distance_scale <s>        Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default " << SCENE_OFFSET_SCALE << ")\n"
-    << "        --ray_distance <s>              Distance offset scale for ray from face: ray offset = s. (overrides scale-based version, used if non zero)\n"
-    << "  -m  | --hit_distance_scale <s>        Maximum hit distance to contribute: max distance = maximum scene extent * s. (default " << SCENE_MAXDISTANCE_SCALE << ")\n"
-    << "        --hit_distance <s>              Maximum hit distance to contribute: max distance = s. (overrides scale-based version, used if non zero)\n"
-    << "  -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(float). "
-    <<                                          " (default 1 " << GROUND_SCALE << " " << GROUND_OFFSET << ")\n"
-    << "        --flip_orientation              Flips model winding and vertex normals (useful for storing two-sided baking results separately)\n"
+    << "  -d  | --ray_distance_scale <s>        Distance offset scale for ray from face: ray offset = maximum scene extent * s. (default 0.01)\n"
+    << "  -m  | --hit_distance_scale <s>        Maximum hit distance to contribute: max distance = maximum scene extent * s. (default 10.0)\n"
+    << "  -g  | --ground_setup <axis> <s> <o>   Ground plane setup: axis(int 0,1,2,3,4,5 = +x,+y,+z,-x,-y,-z) scale(float) offset(offset). (default is 1 100.0 0.0001)\n"
     << "        --no_ground_plane               Disable virtual ground plane\n"
     << "        --no_viewer                     Disable OpenGL viewer\n"
-    << "        --no_gpu                        Disable GPU usage in raytracer\n"
-    << "        --conserve_memory               Triggers some internal settings in optix to save memory\n"
 #ifdef EIGEN3_ENABLED
-    << "  -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default " << REGULARIZATION_WEIGHT << ")\n"
+    << "  -w  | --regularization_weight <w>     Regularization weight for least squares, positive range. (default 0.1)\n"
     << "        --no_least_squares              Disable least squares filtering\n"
 #endif
     << std::endl
@@ -471,28 +433,6 @@ namespace {
     return true;
   }
 
-  // Concat two scenes using shallow copies for all buffers
-  void concat_scenes( const bake::Scene& scene1, const bake::Scene& scene2, 
-    //output
-    bake::Scene& scene, std::vector<bake::Mesh>& meshes, std::vector<bake::Instance>& instances )
-  {
-    // Concat array of meshes
-    for (size_t i = 0; i < scene1.num_meshes; ++i) meshes.push_back( scene1.meshes[i] );
-    for (size_t i = 0; i < scene2.num_meshes; ++i) meshes.push_back( scene2.meshes[i] );
-    scene.num_meshes = scene1.num_meshes + scene2.num_meshes;
-    scene.meshes = &meshes[0];
-
-    // Concat array of instances, with updated mesh offsets
-    for (size_t i = 0; i < scene1.num_instances; ++i) instances.push_back( scene1.instances[i] );
-    for (size_t i = 0; i < scene2.num_instances; ++i) {
-      bake::Instance instance = scene2.instances[i];
-      instance.mesh_index += scene1.num_meshes;
-      instances.push_back( instance );
-    }
-    scene.num_instances = scene1.num_instances + scene2.num_instances;
-    scene.instances = &instances[0];
-  }
-
 }
 
 
@@ -501,9 +441,10 @@ namespace {
 //------------------------------------------------------------------------------
 int sample_main( int argc, const char** argv )
 {
-  
+  SETLOGFILENAME();
+
   // show console and redirect printing
-  NVPWindow::sysVisibleConsole();
+  //NVPWindow::sysVisibleConsole(); FIXME
 
   const Config config( argc, argv ); 
   
@@ -549,23 +490,6 @@ int sample_main( int argc, const char** argv )
     }
   }
 
-  if (config.flip_orientation){
-    for (size_t m = 0; m < scene.num_meshes; ++m) {
-      bake::Mesh& mesh = scene.meshes[m];
-      for (size_t i = 0; i < mesh.num_triangles; i++){
-        std::swap(mesh.tri_vertex_indices[i * 3 + 0], mesh.tri_vertex_indices[i * 3 + 2]);
-      }
-      if (mesh.normals){
-        size_t stride = mesh.normal_stride_bytes / sizeof(float);
-        for (size_t i = 0; i < mesh.num_vertices; i++){
-          mesh.normals[i * stride + 0] *= -1.0;
-          mesh.normals[i * stride + 1] *= -1.0;
-          mesh.normals[i * stride + 2] *= -1.0;
-        }
-      }
-    }
-  }
-
 
   //
   // Generate AO samples
@@ -590,11 +514,6 @@ int sample_main( int argc, const char** argv )
   printTimeElapsed( timer ); 
 
   std::cerr << "Total samples: " << total_samples << std::endl;
-  {
-    const int sqrt_num_rays = static_cast<int>( sqrtf( static_cast<float>( config.num_rays ) ) + .5f );
-    std::cerr << "Rays per sample: " << sqrt_num_rays * sqrt_num_rays << std::endl;
-    std::cerr << "Total rays: " << total_samples * sqrt_num_rays * sqrt_num_rays << std::endl;
-  }
 
   //
   // Evaluate AO samples 
@@ -605,24 +524,7 @@ int sample_main( int argc, const char** argv )
   timer.start();
 
   std::vector<float> ao_values( total_samples );
-  std::fill(ao_values.begin(), ao_values.end(), 0.0f);
-
-
-  float scene_maxdistance;
-  float scene_offset;
-  {
-    const float scene_scale = std::max(std::max(scene_bbox_max[0] - scene_bbox_min[0],
-                                                scene_bbox_max[1] - scene_bbox_min[1]),
-                                                scene_bbox_max[2] - scene_bbox_min[2]);
-    scene_maxdistance = scene_scale * config.scene_maxdistance_scale;
-    scene_offset = scene_scale * config.scene_offset_scale;
-    if (config.scene_offset){
-      scene_offset = config.scene_offset;
-    }
-    if (config.scene_maxdistance){
-      scene_maxdistance = config.scene_maxdistance;
-    }
-  }
+  std::fill( ao_values.begin(), ao_values.end(), 0.0f );
 
   if (config.use_ground_plane_blocker) {
     // Add blocker for ground plane (no surface samples)
@@ -634,16 +536,10 @@ int sample_main( int argc, const char** argv )
       scene.meshes[0].vertex_stride_bytes, 
       plane_vertices, plane_indices, blocker_meshes, blocker_instances);
     bake::Scene blockers = { &blocker_meshes[0], blocker_meshes.size(), &blocker_instances[0], blocker_instances.size() };
-
-    bake::Scene combined_scene;
-    std::vector<bake::Mesh> combined_meshes;
-    std::vector<bake::Instance> combined_instances;
-    concat_scenes( scene, blockers, combined_scene, combined_meshes, combined_instances );
-    bake::computeAO(combined_scene,
-      ao_samples, config.num_rays, scene_offset, scene_maxdistance, config.use_cpu, config.conserve_memory, &ao_values[0]);
+    bake::computeAOWithBlockers(scene, blockers,
+      ao_samples, config.num_rays, config.scene_offset_scale, config.scene_maxdistance_scale, scene_bbox_min, scene_bbox_max, &ao_values[0]);
   } else {
-    bake::computeAO(scene, 
-      ao_samples, config.num_rays, scene_offset, scene_maxdistance, config.use_cpu, config.conserve_memory, &ao_values[0]);
+    bake::computeAO(scene, ao_samples, config.num_rays, config.scene_offset_scale, config.scene_maxdistance_scale, scene_bbox_min, scene_bbox_max, &ao_values[0]);
   }
   printTimeElapsed( timer ); 
 

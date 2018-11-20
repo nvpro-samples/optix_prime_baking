@@ -1,25 +1,29 @@
-/*-----------------------------------------------------------------------
-  Copyright (c) 2015-2016, NVIDIA. All rights reserved.
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
-   * Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
-   * Neither the name of its contributors may be used to endorse 
-     or promote products derived from this software without specific
-     prior written permission.
-  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
-  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-  PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
-  CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-  EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
-  OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
------------------------------------------------------------------------*/
+/* Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *  * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *  * Neither the name of NVIDIA CORPORATION nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+ * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 // This code resamples occlusion computed at face sample points onto vertices using 
 // the method from the following paper:
@@ -34,8 +38,6 @@
 
 #include <cassert>
 #include <iostream>
-#include <map>
-#include <utility>
 #include <vector>
 #include <optixu/optixu_math_namespace.h>
 
@@ -57,8 +59,6 @@ typedef Eigen::Matrix<ScalarType, 4, 4> Matrix44;
 typedef Eigen::Triplet<ScalarType> Triplet;
 typedef Eigen::Matrix<ScalarType, 3, 1> Vector3;
 typedef Eigen::Matrix<ScalarType, 2, 1> Vector2;
-
-typedef std::map< std::pair<int, int>, ScalarType > TripletMap;
 
 namespace {
 
@@ -195,7 +195,7 @@ void edgeBasedRegularizer(const float* verts, size_t num_verts, unsigned vertex_
   
   size_t skipped = 0;
 
-  TripletMap triplet_map;
+  std::vector< Triplet > triplets;
   size_t edge_index = 0;
   for (EdgeMap::const_iterator it = edges.begin(); it != edges.end(); ++it, ++edge_index) {
     if (it->second.count != 2) {
@@ -224,15 +224,9 @@ void edgeBasedRegularizer(const float* verts, size_t num_verts, unsigned vertex_
     // scatter GDtGD:
     for (int i=0; i < 4; i++) {
       for (int j=0; j < 4; j++) {
-        triplet_map[ std::make_pair( vertIdx[i], vertIdx[j] ) ] += GDtGD(i, j);
+        triplets.push_back(Triplet(vertIdx[i], vertIdx[j], GDtGD(i, j)));
       }
     }
-  }
-
-  std::vector< Triplet > triplets;
-  triplets.reserve(triplet_map.size());
-  for ( TripletMap::const_iterator it = triplet_map.begin(); it != triplet_map.end(); ++it) {
-    triplets.push_back( Triplet( it->first.first, it->first.second, it->second ) );
   }
 
 	regularization_matrix.resize((int)num_verts, (int)num_verts);
@@ -275,9 +269,9 @@ void filter_mesh_least_squares(
 
   mass_matrix_timer.start();
 
+  std::vector< Triplet > triplets;
+  triplets.reserve(ao_samples.num_samples * 9);
   const int3* tri_vertex_indices  = reinterpret_cast<int3*>( mesh.tri_vertex_indices );
-
-  TripletMap triplet_map;
 
   for (size_t i = 0; i < ao_samples.num_samples; ++i) {
     const bake::SampleInfo& info = ao_samples.sample_infos[i];
@@ -291,36 +285,29 @@ void filter_mesh_least_squares(
 
     // Note: the reference paper suggests computing the mass matrix analytically.
     // Building it from samples gave smoother results for low numbers of samples per face.
-  
-    triplet_map[ std::make_pair( tri.x, tri.x ) ] += static_cast<ScalarType>( info.bary[0]*info.bary[0]*info.dA );
-    triplet_map[ std::make_pair( tri.y, tri.y ) ] += static_cast<ScalarType>( info.bary[1]*info.bary[1]*info.dA );
-    triplet_map[ std::make_pair( tri.z, tri.z ) ] += static_cast<ScalarType>( info.bary[2]*info.bary[2]*info.dA );
     
+    triplets.push_back( Triplet( tri.x, tri.x, static_cast<ScalarType>( info.bary[0]*info.bary[0]*info.dA ) ) );
+    triplets.push_back( Triplet( tri.y, tri.y, static_cast<ScalarType>( info.bary[1]*info.bary[1]*info.dA ) ) );
+    triplets.push_back( Triplet( tri.z, tri.z, static_cast<ScalarType>( info.bary[2]*info.bary[2]*info.dA ) ) );
 
     {
       const double elem = static_cast<ScalarType>(info.bary[0]*info.bary[1]*info.dA);
-      triplet_map[ std::make_pair( tri.x, tri.y ) ] += elem;
-      triplet_map[ std::make_pair( tri.y, tri.x ) ] += elem;
+      triplets.push_back( Triplet( tri.x, tri.y, elem ) );
+      triplets.push_back( Triplet( tri.y, tri.x, elem ) );
     }
 
     {
       const double elem = static_cast<ScalarType>(info.bary[1]*info.bary[2]*info.dA);
-      triplet_map[ std::make_pair( tri.y, tri.z ) ] += elem;
-      triplet_map[ std::make_pair( tri.z, tri.y ) ] += elem;
+      triplets.push_back( Triplet( tri.y, tri.z, elem ) );
+      triplets.push_back( Triplet( tri.z, tri.y, elem ) );
     }
 
     {
       const double elem = static_cast<ScalarType>(info.bary[2]*info.bary[0]*info.dA);
-      triplet_map[ std::make_pair( tri.x, tri.z ) ] += elem;
-      triplet_map[ std::make_pair( tri.z, tri.x ) ] += elem;
+      triplets.push_back( Triplet( tri.x, tri.z, elem ) );
+      triplets.push_back( Triplet( tri.z, tri.x, elem ) );
     }
 
-  }
-
-  std::vector< Triplet > triplets;
-  triplets.reserve(triplet_map.size());
-  for ( TripletMap::const_iterator it = triplet_map.begin(); it != triplet_map.end(); ++it) {
-    triplets.push_back( Triplet( it->first.first, it->first.second, it->second ) );
   }
 
   // Mass matrix

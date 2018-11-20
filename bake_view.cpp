@@ -1,32 +1,36 @@
-/*-----------------------------------------------------------------------
-  Copyright (c) 2015-2016, NVIDIA. All rights reserved.
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
-   * Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
-   * Neither the name of its contributors may be used to endorse 
-     or promote products derived from this software without specific
-     prior written permission.
-  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
-  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-  PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
-  CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-  EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
-  OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
------------------------------------------------------------------------*/
+/* Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *  * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *  * Neither the name of NVIDIA CORPORATION nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+ * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <algorithm>
 #include <iostream>
 
 #include <main.h>
-#include <nv_helpers_gl/WindowInertiaCamera.h>
-#include <nv_helpers_gl/GLSLProgram.h>
+#include <nv_helpers/appwindowcamerainertia.hpp>
+#include "GLSLProgram.h"
 
 #include "bake_api.h"
 
@@ -62,7 +66,7 @@ const char* fragment_program =
 ;
 
 
-class MyWindow: public WindowInertiaCamera
+class MyWindow: public AppWindowCameraInertia
 {
 private:
   const bake::Mesh* m_meshes;
@@ -91,7 +95,7 @@ public:
            const float fov,
            const float clipnear,
            const float clipfar)
-  : WindowInertiaCamera(eye, lookat, lookat, fov, clipnear, clipfar), 
+  : AppWindowCameraInertia(eye, lookat, lookat, fov, clipnear, clipfar), 
     m_meshes(meshes),
     m_num_meshes(num_meshes),
     m_instances(instances),
@@ -104,7 +108,7 @@ public:
 
   virtual bool init()
   {
-    if (!WindowInertiaCamera::init()) return false;
+    if (!AppWindowCameraInertia::init()) return false;
 
     if (!m_prog.compileProgram(vertex_program, NULL, fragment_program)) return false;
 
@@ -180,7 +184,7 @@ public:
 
   virtual void display()
   {
-    WindowInertiaCamera::display();
+    AppWindowCameraInertia::display();
 
     m_prog.enable();
     mat4f world2screen = m_projection * m_camera.m4_view;
@@ -282,7 +286,7 @@ namespace bake {
 
     static MyWindow window(meshes, num_meshes, instances, num_instances, vertex_colors, eye, lookat, fov, clipnear, clipfar);
 
-    NVPWindow::ContextFlags context(
+    NVPWindow::ContextFlagsGL context(
       1,      //major;
       0,      //minor;
       false,  //core;
@@ -295,10 +299,15 @@ namespace bake {
       NULL    //share;
       );
 
-    if (!window.create("Baked AO Viewer", &context)) return;
+    if (!window.activate(NVPWindow::WINDOW_API_OPENGL, 1280, 720, "Baked AO Viewer", &context))
+    {
+        LOGE("Failed to initialize the sample\n");
+        return;
+    }
 
-    window.makeContextCurrent();
+    window.makeContextCurrentGL();
     window.swapInterval(0);
+    window.reshape(window.getWidth(), window.getHeight());
 
     while(MyWindow::sysPollEvents(false)) {
       window.idle();
